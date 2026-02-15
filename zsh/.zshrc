@@ -115,6 +115,7 @@ alias l='eza -la --icons'
 alias t='tmux'
 alias nvcp='nvim "$(kitten choose_files)"'
 alias cl='clear'
+alias lv='NVIM_APPNAME=lazyvim nvim'
 export PATH="$HOME/.local/bin:$PATH"
 
 # Avvia Redshift in background per Reggio Emilia
