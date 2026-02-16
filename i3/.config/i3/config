@@ -18,6 +18,8 @@ exec_always --no-startup-id "/home/alessandro-biagio-branca/.config/polybar/laun
 exec_always --no-startup-id "python3 /home/alessandro-biagio-branca/autotiling/autotiling/main.py"
 exec --no-startup-id "redshift -l 44.69:10.63 -t 6500:3500"
 exec_always --no-startup-id "xset -dpms"
+# Force NVIDIA Composition Pipeline per eliminare tearing e scatti
+exec_always --no-startup-id nvidia-settings --assign CurrentMetaMode="DP-2: nvidia-auto-select +0+0 {ForceCompositionPipeline=On, ForceFullCompositionPipeline=On}"
 font pango:Hack Nerd Font Mono 12
 
 # This font is widely installed, provides lots of unicode glyphs, right-to-left
@@ -117,7 +119,7 @@ bindsym $mod+space exec rofi -show combi
 # focus the parent container
 
 bindsym $mod+a focus parent
-bindsym $mod+b exec brave
+bindsym $mod+b exec brave-browser
 bindsym $mod+n exec nautilus
 bindsym $mod+p exec flameshot gui
 
