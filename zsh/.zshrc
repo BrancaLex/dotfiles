@@ -71,7 +71,7 @@ ZSH_THEME="robbyrussell"
 # Custom plugins may be added to $ZSH_CUSTOM/plugins/
 # Example format: plugins=(rails git textmate ruby lighthouse)
 # Add wisely, as too many plugins slow down shell startup.
-plugins=(git zsh-syntax-highlighting)
+plugins=(git zsh-syntax-highlighting zsh-autosuggestions)
 
 source $ZSH/oh-my-zsh.sh
 
@@ -124,7 +124,7 @@ if ! pgrep -x "redshift" > /dev/null; then
     (redshift -l 44.70:10.63 &> /dev/null &)
 fi
 
-eval "$(oh-my-posh init zsh --config '/home/alessandro-biagio-branca/Documents/PoshConf/catpuccin.json')"
+eval "$(oh-my-posh init zsh --config '/home/Ale/Documents/Themes/OMP/catppuccin_macchiato.omp.json')"
 
 
 bindkey -v
