@@ -1,0 +1,12 @@
+[Unit]
+# Sessione Hyprland per systemd --user. Hyprland (senza uwsm) non attiva
+# graphical-session.target, da cui dipendono servizi come xdg-desktop-portal
+# (Requisite=graphical-session.target). Avviato da hyprland.conf via exec-once:
+# BindsTo tira su graphical-session.target come dipendenza, bypassando il suo
+# RefuseManualStart=yes. Senza questo il portal non si attiva e Brave/GTK4 su
+# Wayland nativo crasha (SIGSEGV) interrogando il Settings portal.
+Description=Hyprland session
+BindsTo=graphical-session.target
+Before=graphical-session.target
+Wants=graphical-session-pre.target
+After=graphical-session-pre.target
