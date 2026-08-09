@@ -1,0 +1,19 @@
+font-family = "JetBrainsMonoNL Nerd Font Propo"
+font-size = 16
+
+
+theme = dark:Atom One Dark,light:Catppuccin Latte
+
+gtk-titlebar = true
+
+# Latenza di apertura finestra: ~400 ms -> ~90 ms (misurato con hyprctl, fino a
+# finestra mappata). Il default `gtk-single-instance = detect` risolve a `false`
+# quando ghostty non parte da un .desktop -- ed e' il caso del keybind Hyprland
+# ($mod+RETURN, un exec diretto), quindi ogni pressione istanziava un processo
+# completo con init GTK4 + EGL da zero.
+gtk-single-instance = true
+
+# Necessario INSIEME al precedente: col default `true` la chiusura dell'ultima
+# finestra termina il processo, e il lancio dopo ripaga i 400 ms di cold start.
+# Con `false` il processo resta residente a finestre zero e la latenza e' costante.
+quit-after-last-window-closed = false
