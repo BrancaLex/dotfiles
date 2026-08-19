@@ -138,16 +138,32 @@ hl.env("QT_QPA_PLATFORMTHEME", "gnome")
 -- ~/.local/bin/matlab: __NV_PRIME_RENDER_OFFLOAD=1 __GLX_VENDOR_LIBRARY_NAME=nvidia).
 hl.env("LIBVA_DRIVER_NAME", "radeonsi")
 hl.env("VDPAU_DRIVER", "radeonsi")
--- EGL: rimuovere __GLX_VENDOR_LIBRARY_NAME sistema solo il percorso GLX (Xwayland).
--- I client Wayland usano EGL, dove libglvnd sceglie il vendor per PRIORITA' dai file
--- in /usr/share/glvnd/egl_vendor.d/ -> 10_nvidia.json vince su 50_mesa.json, quindi
--- SENZA questa riga un client Wayland finisce comunque sulla dGPU da solo (verificato:
--- eglinfo su piattaforma Wayland riporta "NVIDIA GeForce RTX 5060", non la 780M).
--- Pinnando il vendor a Mesa: render su AMD, coerente col primary DRM, e init EGL da
--- ~190-266 ms a ~106-117 ms.
--- NB: per un offload EGL esplicito sulla dGPU questa va tolta (env -u), non basta
--- __NV_PRIME_RENDER_OFFLOAD. Il percorso GLX (prime-run) e CUDA non sono toccati.
-hl.env("__EGL_VENDOR_LIBRARY_FILENAMES", "/usr/share/glvnd/egl_vendor.d/50_mesa.json")
+-- __EGL_VENDOR_LIBRARY_FILENAMES NON va impostata qui. La storia, per intero:
+--
+-- Serviva a tenere i client Wayland sull'iGPU: rimuovere __GLX_VENDOR_LIBRARY_NAME
+-- sistema solo GLX (Xwayland), mentre i client Wayland usano EGL, dove libglvnd sceglie
+-- il vendor per PRIORITA' dai file in /usr/share/glvnd/egl_vendor.d/ e 10_nvidia.json
+-- vince su 50_mesa.json. Pinnare Mesa portava l'init EGL da ~190-266 ms a ~106-117 ms.
+--
+-- Il problema: hl.env scrive nell'ambiente del COMPOSITORE, non solo dei figli. Quando
+-- l'HDMI (cablato sulla dGPU) e' collegato, aquamarine deve creare un secondo renderer
+-- EGL su /dev/dri/card1 per il blit multi-GPU. Con il vendor pinnato a Mesa quel
+-- renderer non nasce -- Mesa non ha driver per il nodo NVIDIA proprietario:
+--   eglInitialize -> "DRI2: failed to load driver" -> "initMgpu: no renderer"
+--   -> "Failed to initialize renderer backend for blitting"
+-- e il monitor esterno resta NERO, con il modeset ritentato in loop (che e' cio' che
+-- rende scattoso il pannello interno; hyprctl continua a riportare 165 Hz).
+--
+-- Accodare 10_nvidia.json NON risolve: misurato, l'errore resta "DRI2:" (Mesa).
+-- libglvnd sceglie il vendor UNA VOLTA per device; se eglInitialize fallisce non
+-- ripiega sul successivo. L'ordine decide chi prova per primo, non un fallback.
+--
+-- Se i client dovessero regredire sulla dGPU, il pin va riapplicato SOLO A LORO, mai
+-- qui: vedi il dbus-update-activation-environment sopra (app via D-Bus/systemd) e
+-- ~/.local/bin/browser-amd-env (comandi dai keybind).
+-- Per un offload EGL esplicito sulla dGPU serve comunque env -u di questa variabile
+-- ovunque sia impostata: __NV_PRIME_RENDER_OFFLOAD da solo non basta
+-- (vedi distrobox/.local/bin/matlab). GLX (prime-run) e CUDA non sono toccati.
 -- Variabile di aquamarine (compositor), non dei client: nessun costo per-processo.
 -- Governa il blit multi-GPU, che serve davvero quando l'HDMI sulla dGPU e' collegato.
 hl.env("AQ_FORCE_LINEAR_BLIT", "0")
@@ -285,6 +301,18 @@ hl.bind(mainMod .. " + SHIFT + B", hl.dsp.exec_cmd(waybarLaunch))
 hl.bind(mainMod .. " + TAB", hl.dsp.exec_cmd("snappy-switcher next --mod alt"))
 hl.bind(mainMod .. " + SHIFT + TAB", hl.dsp.exec_cmd("snappy-switcher prev --mod alt"))
 hl.bind("CTRL + " .. mainMod .. " + V", hl.dsp.exec_cmd("copyq toggle"))
+-- OpenWhispr (dettatura vocale): il bind e' manuale perche' l'app registra
+-- l'hotkey con `hyprctl keyword bind`, rifiutato dal parser Lua, e come fallback
+-- appende un `source =` a hyprland.conf, che sotto Lua e' ignorato. Il servizio
+-- D-Bus com.openwhispr.App resta comunque esposto e accetta Toggle().
+-- Solo modalita' toggle: il D-Bus non espone press/release (niente hold-to-talk).
+hl.bind(
+	"CTRL + " .. mainMod .. " + D",
+	hl.dsp.exec_cmd(
+		"dbus-send --session --type=method_call --dest=com.openwhispr.App "
+			.. "/com/openwhispr/App com.openwhispr.App.Toggle"
+	)
+)
 
 -- System actions
 hl.bind(mainMod .. " + Backspace", hl.dsp.exec_cmd("wlogout -b 5 -T 348 -B 348 -n -C ~/.config/wlogout/style.css"))
