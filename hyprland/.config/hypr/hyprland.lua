@@ -34,7 +34,10 @@ local mainMod = "ALT"
 -- Path ricorrenti (repo Stow + dir deployata) centralizzati per non duplicarli.
 local dots = "/home/ale/dotfiles"
 local hyprDir = "/home/ale/.config/hypr"
-local waybarLaunch = dots .. "/waybar/.config/waybar/scripts/launch.sh"
+-- Shell desktop (barra e, dalle fasi successive, notifiche/launcher/OSD).
+-- Un solo processo per tutti i monitor: niente launcher serializzato con
+-- flock come richiedeva waybar, che era un processo per barra.
+local shell = "qs -c ale"
 local applyTheme = dots .. "/hyprland/.config/hypr/scripts/apply_theme.sh"
 local toggleTheme = dots .. "/hyprland/.config/hypr/scripts/toggle_theme.sh"
 local selectWallpaper = hyprDir .. "/scripts/select_wallpaper.sh"
@@ -58,7 +61,7 @@ local inactiveBorder = (okBorder and walCol.inactive) or "rgba(595959aa)"
 -------------------
 -- Vedi https://wiki.hypr.land/Configuring/Basics/Autostart/
 hl.on("hyprland.start", function()
-	hl.exec_cmd(waybarLaunch)
+	hl.exec_cmd(shell)
 	hl.exec_cmd("hyprpaper")
 	hl.exec_cmd(applyTheme .. " $(cat ~/.cache/theme_mode 2>/dev/null || echo dark)")
 	hl.exec_cmd("snappy-switcher --daemon")
@@ -297,7 +300,9 @@ hl.bind(
 	mainMod .. " + P",
 	hl.dsp.exec_cmd('grim -g "$(slurp)" - | wl-copy -t image/png && notify-send "Image copied to clipboard" -t 3000')
 )
-hl.bind(mainMod .. " + SHIFT + B", hl.dsp.exec_cmd(waybarLaunch))
+-- ALT+SHIFT+B riavvia la shell. Serve di rado: quickshell ricarica da se'
+-- i .qml al salvataggio; resta utile se il processo muore del tutto.
+hl.bind(mainMod .. " + SHIFT + B", hl.dsp.exec_cmd("pkill -x qs; sleep 0.3; " .. shell))
 hl.bind(mainMod .. " + TAB", hl.dsp.exec_cmd("snappy-switcher next --mod alt"))
 hl.bind(mainMod .. " + SHIFT + TAB", hl.dsp.exec_cmd("snappy-switcher prev --mod alt"))
 hl.bind("CTRL + " .. mainMod .. " + V", hl.dsp.exec_cmd("copyq toggle"))

@@ -68,9 +68,9 @@ EOF
 # 5. Ricarica Hyprland (ri-esegue hyprland.lua → rilegge wal-colors.lua via require)
 hyprctl reload >/dev/null 2>&1
 
-# 6. Ricarica Waybar tramite l'unico launcher serializzato (flock) → niente
-#    istanze duplicate anche se al boot corre in parallelo a launch.sh.
-"$HOME/.config/waybar/scripts/launch.sh"
+# 6. (rimosso) Waybar non esiste piu': la barra e' quickshell, che osserva
+#    ~/.cache/wal/colors.json con FileView(watchChanges) e si ri-colora da se'
+#    appena `wal` lo riscrive allo step 1. Nessun restart, nessun CSS generato.
 
 # 7. Ricarica Kitty (remote control, fallback SIGUSR1)
 kitten @ --to "unix:/tmp/kitty-${USER}" set-colors --all --configured \
