@@ -503,6 +503,27 @@ Both are LazyVim-based: plugins live under `lua/plugins/*.lua`, pinned in
   `XDG_SESSION_*` — `pam_systemd` sets those on a bare getty login too) and skips the
   `sed` on `hyprpaper.conf`; persistence across restarts rides on `~/.cache/wal/wal`,
   which `wal` rewrites on every wallpaper change and `spawn-sh-at-startup` reads back.
+  **Under niri the compositor is itself a `systemd --user` service — so the activation
+  environment IS the compositor's environment.** `niri --session`'s parent is
+  `systemd --user`, not `niri-session` (check with `ps -o ppid`), so **no GPU-selecting
+  variable may go into `dbus-update-activation-environment --systemd`** — the exact
+  opposite of Hyprland, where that line is the *correct* place for the Mesa pin because
+  it reaches only D-Bus-activated clients. `__EGL_VENDOR_LIBRARY_FILENAMES=…50_mesa.json`
+  sat there and killed the HDMI: pinned to Mesa, niri cannot build the **second** EGL
+  renderer on `/dev/dri/card1` (nvidia) that blitting to the dGPU-wired HDMI requires →
+  `failed to initialize renderer … Failed to initialize EGL` →
+  `error creating DRM compositor … /dev/dri/card1 … Invalid argument` →
+  `No supported renderer buffer format found`, and the output stays dark with
+  `/sys/class/drm/card1-HDMI-A-1/enabled` reading `disabled`. Same failure as the
+  `hl.env` one above, different entry path.
+  **The bug is latent and arms itself on the second session:** `systemctl --user
+  set-environment` persists for the whole life of `systemd --user`, so the boot's first
+  niri session starts clean *and pollutes the environment*, and the next one inherits it.
+  A config fix alone is not enough — clear the live state with
+  `systemctl --user unset-environment __EGL_VENDOR_LIBRARY_FILENAMES`, and restart the
+  session: the secondary renderer is built **only at startup**, so re-plugging the cable
+  just repeats `error connecting connector`. Removing the pin costs nothing — with recent
+  Mesa a Wayland client follows the compositor's device by itself.
   **`focus-follows-mouse` needs `max-scroll-amount`.** Absent by default (Hyprland has
   `follow_mouse=1`), and in scrollable-tiling an unbounded ffm makes the **strip scroll**
   as soon as the pointer reaches a partly-offscreen column — the view slides out from

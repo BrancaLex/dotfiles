@@ -194,8 +194,14 @@ spawn-at-startup "qs" "-c" "ale"
 // ogni cambio di sfondo: è già la sorgente di verità di apply_theme.sh, quindi
 // non serve un secondo file di stato. Nessun flag di transizione all'avvio --
 // il default va bene e un flag inesistente farebbe fallire il comando.
-spawn-at-startup "awww-daemon"
-spawn-sh-at-startup "awww img \"$(cat ~/.cache/wal/wal)\""
+// Il fallback non e' decorativo: se awww non e' installato (macchina appena
+// provisionata -- 40-stow precede l'installazione dei pacchetti) senza di esso il
+// desktop resta SENZA SFONDO, perche' hyprpaper non viene piu' lanciato. Con `||`
+// awww-daemon assente esce subito (127) e hyprpaper prende il suo posto: disegna
+// dalla propria conf, ma non e' pilotabile a runtime (nessun socket IPC qui),
+// quindi ALT+W resta inerte finche' awww non c'e'.
+spawn-sh-at-startup "awww-daemon || hyprpaper"
+spawn-sh-at-startup "awww img \"$(cat ~/.cache/wal/wal)\" 2>/dev/null || true"
 spawn-sh-at-startup "~/dotfiles/hyprland/.config/hypr/scripts/apply_theme.sh $(cat ~/.cache/theme_mode 2>/dev/null || echo dark)"
 spawn-sh-at-startup "systemctl --user start elephant.service"
 spawn-at-startup "walker" "--gapplication-service"
@@ -204,12 +210,34 @@ spawn-at-startup "copyq" "--start-server"
 spawn-at-startup "wlsunset" "-l" "44.7" "-L" "10.6"
 spawn-sh-at-startup "~/.config/swaync/scripts/screenshare-inhibit.sh"
 
-// Variabili GPU e XDG_SESSION_TYPE nell'activation environment D-Bus. Vale la
-// stessa ragione documentata in CLAUDE.md per Hyprland: swaync, i portal e le
-// PWA partono via D-Bus/systemd e NON ereditano l'ambiente del compositore --
-// senza questo pin finirebbero su EGL NVIDIA invece che sull'iGPU AMD.
+// Variabili di sessione nell'activation environment: swaync, i portal e le PWA
+// partono via D-Bus/systemd e non ereditano l'ambiente del compositore.
 // HYPRLAND_INSTANCE_SIGNATURE -> NIRI_SOCKET (l'handle IPC di questo compositore).
-spawn-sh-at-startup "dbus-update-activation-environment --systemd WAYLAND_DISPLAY XDG_CURRENT_DESKTOP XDG_SESSION_TYPE XDG_SESSION_DESKTOP NIRI_SOCKET __EGL_VENDOR_LIBRARY_FILENAMES=/usr/share/glvnd/egl_vendor.d/50_mesa.json LIBVA_DRIVER_NAME=radeonsi VDPAU_DRIVER=radeonsi"
+//
+// QUI NON VA NESSUNA VARIABILE CHE SELEZIONI LA GPU -- e' l'inverso di Hyprland.
+// C'era __EGL_VENDOR_LIBRARY_FILENAMES=.../50_mesa.json, corretto in hyprland.lua
+// (dove pinna solo i client attivati da D-Bus) e FATALE qui, perche' sotto niri il
+// COMPOSITORE STESSO e' un servizio di systemd --user: `niri --session` ha per
+// padre systemd --user, non niri-session (verificato con `ps -o ppid`). Quindi
+// l'activation environment E' l'ambiente del compositore.
+//
+// Effetto: EGL pinnato a Mesa impedisce a niri di costruire il SECONDO renderer su
+// /dev/dri/card1 (nvidia), quello che serve a blittare sull'HDMI -- che e' cablato
+// alla dGPU. Mesa non ha driver per il nodo proprietario, quindi:
+//   failed to initialize renderer ... Failed to initialize EGL
+//   error creating DRM compositor ... /dev/dri/card1 ... Invalid argument
+//   No supported renderer buffer format found
+// e l'output resta spento (`/sys/class/drm/card1-HDMI-A-1/enabled` -> disabled).
+// Identico al guasto documentato in CLAUDE.md per Hyprland, per un'altra via.
+//
+// Il guasto era LATENTE e si armava da se': `set-environment` persiste per tutta
+// la vita di systemd --user, quindi la prima sessione del boot partiva pulita e
+// inquinava l'ambiente, e la SECONDA lo ereditava con l'HDMI nero.
+//
+// Il pin era comunque ridondante: con Mesa recente un client Wayland segue da se'
+// il device del compositore (vedi CLAUDE.md, rimosso anche da hl.env senza
+// regressioni). Un offload EGL alla dGPU si fa per-comando, non qui.
+spawn-sh-at-startup "dbus-update-activation-environment --systemd WAYLAND_DISPLAY XDG_CURRENT_DESKTOP XDG_SESSION_TYPE XDG_SESSION_DESKTOP NIRI_SOCKET LIBVA_DRIVER_NAME=radeonsi VDPAU_DRIVER=radeonsi"
 
 // Preload di Brave headless: il primo avvio di sessione costa ~3166 ms, i
 // successivi ~140 ms perche' Brave sopravvive con zero finestre. DEVE passare
