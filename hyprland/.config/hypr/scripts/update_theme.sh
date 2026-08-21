@@ -22,6 +22,11 @@ pkill waybar
 waybar & disown
 
 # 4. Aggiorna i bordi di Hyprland
+# 4b. Focus-ring pywal per niri (vedi gen_niri_wal_colors.sh: niri ricarica da sé
+#     i file inclusi, quindi scrivere il frammento basta). Senza questa riga il
+#     focus-ring seguirebbe il toggle dark/light ma NON il cambio di wallpaper.
+~/.config/hypr/scripts/gen_niri_wal_colors.sh
+
 ACCENT=$(cat ~/.cache/wal/colors.json | jq -r '.colors.color4' | sed 's/#//')
 SECONDARY=$(cat ~/.cache/wal/colors.json | jq -r '.colors.color2' | sed 's/#//')
 COLOR1="ff$ACCENT"

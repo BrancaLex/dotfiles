@@ -1,0 +1,422 @@
+// ##########################################################################
+// niri — configurazione clonata dai keybind di hyprland.lua.
+//
+// Formato KDL (https://kdl.dev). Riferimento:
+// https://niri-wm.github.io/niri/Configuration:-Introduction
+//
+// Hyprland resta il compositore primario: questo e' un secondo stack che
+// coesiste, come i3/+polybar/ accanto a hyprland/+waybar/. Nessun file di
+// hyprland/ e' toccato.
+//
+// IL SALTO CONCETTUALE, che governa tutte le mappature qui sotto:
+// Hyprland e' tiling dinamico a scomposizione binaria (layout "dwindle");
+// niri e' SCROLLABLE-TILING -- una striscia orizzontale infinita di COLONNE,
+// ognuna con finestre impilate verticalmente, e workspace DINAMICI. Non
+// esistono split, pseudo-tiling, ne' albero di finestre. La mappa vim-like
+// resta identica al tatto, ma cambia la semantica: ALT+H/L naviga tra
+// COLONNE, ALT+J/K tra finestre DENTRO la colonna.
+//
+// VERIFICA PRIMA DI USARE:
+//   niri validate     # KDL malformato -> la sessione non parte, e dal TTY
+//                     # non c'e' una via di ritorno comoda.
+//   niri              # da dentro Hyprland: sessione annidata (finestra winit)
+// ##########################################################################
+
+// ---------------
+// ---- INPUT ----
+// ---------------
+// Portato da hl.config{ input = ... } (hyprland.lua:225-240).
+input {
+    // Fedelta' a `local mainMod = "ALT"` di hyprland.lua. NON e' un semplice
+    // alias testuale: mod-key governa anche le GESTURE MOUSE built-in, quindi
+    // e' questa riga -- non un bind -- a replicare hl.dsp.window.drag()/resize().
+    //   Alt + LMB tenuto = sposta la finestra (move interattivo)
+    //   Alt + RMB tenuto = ridimensiona
+    // (durante il move, il tasto destro commuta floating/tiling.)
+    mod-key "Alt"
+    // Nella sessione ANNIDATA il Mod diventa Super, cosi' i bind si provano
+    // senza contendere il modificatore all'Hyprland che la ospita. Tutti i
+    // bind sotto usano "Mod", non "Alt", proprio per restare testabili li'.
+    mod-key-nested "Super"
+
+    // Il focus segue il cursore, come il follow_mouse=1 di default in Hyprland.
+    // max-scroll-amount NON e' un dettaglio: niri e' scrollable-tiling, quindi
+    // senza limite il ffm fa SCORRERE LA STRISCIA appena il cursore raggiunge una
+    // colonna parzialmente fuori vista -- la vista si sposta da sola sotto il
+    // mouse. Il valore e' una percentuale della larghezza dell'area di lavoro;
+    // "0%" significa "prendi il focus solo se non serve scorrere", che e' la
+    // semantica piu' vicina a Hyprland (dove non esiste un viewport scorrevole).
+    // Alternativa piu' permissiva (esempio della doc ufficiale): "10%".
+    focus-follows-mouse max-scroll-amount="0%"
+
+    keyboard {
+        xkb {
+            layout "us,it"
+            options "grp:lwin_toggle"
+        }
+        numlock
+    }
+
+    touchpad {
+        tap
+        natural-scroll
+        dwt                  // == touchpad.disable_while_typing = true
+        drag-lock
+        scroll-factor 0.3
+    }
+}
+
+// -----------------
+// ---- OUTPUTS ----
+// -----------------
+// Portato da monitors.lua. eDP-2 -> iGPU AMD 780M (primary DRM, il pannello e'
+// cablato li'); HDMI-A-1 -> dGPU RTX 5060.
+//
+// ATTENZIONE: i nomi qui sono quelli riportati da aquamarine/Hyprland. Vanno
+// confermati al primo avvio con `niri msg outputs`: se il connettore ha un
+// nome diverso (p.es. eDP-1) questi nodi sono SILENZIOSAMENTE inerti e i
+// monitor finiscono in auto-layout.
+output "eDP-2" {
+    mode "2560x1600@165.000"
+    scale 1.3333334
+    position x=533 y=1914
+}
+
+// Acer XB273 GX (1080p 240 Hz). Modalita' ESPLICITA e non "preferred": la
+// modalita' raccomandata dall'EDID e' 1920x1080@60, mentre 1920x1080@239.964 e'
+// comunque tra quelle disponibili -- con "preferred" il monitor girerebbe a
+// 60 Hz. La position e' calcolata su un'altezza di 1080 px, quindi la modalita'
+// esplicita mantiene anche la geometria deterministica.
+//
+// ATTENZIONE, il refresh va COPIATO da `niri msg outputs`, non trascritto a
+// mano: il match e' per STRINGA ESATTA a tre decimali, senza tolleranza. Qui
+// c'era 239.960 (plausibile, ma inesistente: il connettore espone 239.964) e
+// il fallimento e' SILENZIOSO -- `niri validate` risponde "config is valid" e
+// il monitor cade sulla preferred a 60 Hz. L'unica traccia e' nel journal:
+//   journalctl --user -b -t niri | grep "could not be found"
+//   WARN configured mode 1920x1080@239.96 could not be found, falling back to preferred
+output "HDMI-A-1" {
+    mode "1920x1080@239.964"
+    scale 1.0
+    position x=538 y=834
+}
+
+// --------------------
+// ---- WORKSPACES ----
+// --------------------
+// Portato da workspaces.lua. I workspace di niri sono DINAMICI: `focus-workspace 1`
+// (indice intero) e' "best effort" e un indice oltre il numero di workspace
+// esistenti collassa sull'ultimo vuoto -- l'assegnazione per-monitor svanirebbe.
+// Servono quindi workspace NOMINATI, che persistono anche da vuoti.
+// Nei bind si usa la STRINGA "1": in KDL "1" (nome) e 1 (indice) sono tipi
+// distinti e selezionano semantiche diverse.
+workspace "1"  { open-on-output "eDP-2"; }
+workspace "2"  { open-on-output "eDP-2"; }
+workspace "3"  { open-on-output "eDP-2"; }
+workspace "4"  { open-on-output "eDP-2"; }
+workspace "5"  { open-on-output "eDP-2"; }
+workspace "6"  { open-on-output "HDMI-A-1"; }
+workspace "7"  { open-on-output "HDMI-A-1"; }
+workspace "8"  { open-on-output "HDMI-A-1"; }
+workspace "9"  { open-on-output "HDMI-A-1"; }
+workspace "10" { open-on-output "HDMI-A-1"; }
+
+// Sostituto dello special workspace "magic" (hyprland.lua:344-345). E' l'analogo
+// piu' vicino a uno scratchpad: workspace dedicato, persistente, sempre
+// raggiungibile. DIFFERENZA: non e' un overlay -- ALT+S ci salta SOPRA invece
+// di sovrapporlo alla vista corrente.
+workspace "magic" { open-on-output "eDP-2"; }
+
+// ----------------
+// ---- LAYOUT ----
+// ----------------
+layout {
+    gaps 10                        // da general.gaps_out
+    center-focused-column "never"
+
+    // Il cue di focus e' il BORDO, come in Hyprland (vedi CLAUDE.md: le window
+    // rule opacity sono 1.0/1.0, nessun dimming). Colori = fallback statico di
+    // hyprland.lua:59. NIENTE integrazione pywal: richiederebbe un template
+    // colors-niri.kdl + uno step in apply_theme.sh + `niri msg action
+    // load-config-file`. Fuori scope.
+    focus-ring {
+        width 0
+        active-gradient from="#33ccff" to="#00ff99" angle=45
+        inactive-color "#595959"
+    }
+
+    border {
+        off
+    }
+
+    preset-column-widths {
+        proportion 0.33333
+        proportion 0.5
+        proportion 0.66667
+    }
+
+    default-column-width { proportion 0.5; }
+}
+
+// Focus-ring pywal, generato da apply_theme.sh (step 4b) in
+// ~/.config/niri/wal-colors.kdl. Il file NON e' tracciato (.gitignore) e il
+// focus-ring statico qui sopra resta il fallback quando manca -- stesso pattern
+// del `require "wal-colors"` in hyprland.lua.
+//
+// Perche' un include e non l'IPC: niri non espone azioni per i colori, ma
+// SORVEGLIA tutti i file inclusi e ricarica la config da se' quando cambiano.
+// Nessun `niri msg action load-config-file` necessario.
+//
+// L'ORDINE CONTA: le sezioni non si fondono ricorsivamente, vince l'ULTIMA
+// definizione (doc "Include > Merging", esempio con struts; solo `binds` fa
+// merge per-chiave). L'include va quindi DOPO layout{}, e il frammento deve
+// contenere il focus-ring per intero.
+include optional=true "wal-colors.kdl"
+
+// Coerente con l'estetica del repo: il bordo lo disegna il compositore, non il
+// client. Serve anche a far combaciare focus-ring e geometria reale.
+prefer-no-csd
+
+screenshot-path "~/Pictures/Screenshots/Screenshot from %Y-%m-%d %H-%M-%S.png"
+
+// -------------------
+// ---- AUTOSTART ----
+// -------------------
+// Sottoinsieme COMPOSITOR-AGNOSTIC di hl.on("hyprland.start", ...).
+spawn-at-startup "qs" "-c" "ale"
+// Wallpaper: awww (ex swww) e non hyprpaper. Non è una preferenza estetica --
+// hyprpaper qui DISEGNEREBBE ma sarebbe irraggiungibile: il suo socket sta in
+// $XDG_RUNTIME_DIR/hypr/$HIS/, che senza istanza Hyprland non esiste, quindi lo
+// sfondo resterebbe inchiodato a hyprpaper.conf per tutta la sessione (ALT+W
+// inerte). awww ha una CLI propria, indipendente dal compositore.
+//
+// La persistenza tra i riavvii passa da ~/.cache/wal/wal, che `wal` riscrive a
+// ogni cambio di sfondo: è già la sorgente di verità di apply_theme.sh, quindi
+// non serve un secondo file di stato. Nessun flag di transizione all'avvio --
+// il default va bene e un flag inesistente farebbe fallire il comando.
+spawn-at-startup "awww-daemon"
+spawn-sh-at-startup "awww img \"$(cat ~/.cache/wal/wal)\""
+spawn-sh-at-startup "~/dotfiles/hyprland/.config/hypr/scripts/apply_theme.sh $(cat ~/.cache/theme_mode 2>/dev/null || echo dark)"
+spawn-sh-at-startup "systemctl --user start elephant.service"
+spawn-at-startup "walker" "--gapplication-service"
+spawn-at-startup "hypridle"
+spawn-at-startup "copyq" "--start-server"
+spawn-at-startup "wlsunset" "-l" "44.7" "-L" "10.6"
+spawn-sh-at-startup "~/.config/swaync/scripts/screenshare-inhibit.sh"
+
+// Variabili GPU e XDG_SESSION_TYPE nell'activation environment D-Bus. Vale la
+// stessa ragione documentata in CLAUDE.md per Hyprland: swaync, i portal e le
+// PWA partono via D-Bus/systemd e NON ereditano l'ambiente del compositore --
+// senza questo pin finirebbero su EGL NVIDIA invece che sull'iGPU AMD.
+// HYPRLAND_INSTANCE_SIGNATURE -> NIRI_SOCKET (l'handle IPC di questo compositore).
+spawn-sh-at-startup "dbus-update-activation-environment --systemd WAYLAND_DISPLAY XDG_CURRENT_DESKTOP XDG_SESSION_TYPE XDG_SESSION_DESKTOP NIRI_SOCKET __EGL_VENDOR_LIBRARY_FILENAMES=/usr/share/glvnd/egl_vendor.d/50_mesa.json LIBVA_DRIVER_NAME=radeonsi VDPAU_DRIVER=radeonsi"
+
+// Preload di Brave headless: il primo avvio di sessione costa ~3166 ms, i
+// successivi ~140 ms perche' Brave sopravvive con zero finestre. DEVE passare
+// da browser-amd-env (l'ambiente che conta e' quello dell'ISTANZA RESIDENTE:
+// i $mod+B successivi si agganciano a quella via singleton lock del profilo).
+spawn-sh-at-startup "sleep 25; exec ~/.local/bin/browser-amd-env brave --no-startup-window"
+
+// NON portati da hyprland.lua, di proposito:
+//  - `systemctl --user start hyprland-session.target` e l'avvio manuale di
+//    xdg-desktop-portal: servivano perche' Hyprland, lanciato senza uwsm, non
+//    raggiungeva graphical-session.target. niri avviato con `--session` ci
+//    arriva da solo, e usa xdg-desktop-portal-gnome/gtk, non quello di Hyprland.
+
+// ------------------------
+// ---- KEYBINDINGS ----
+// ------------------------
+// Clone di hyprland.lua:291-393. "Mod" == Alt (vedi input.mod-key), Super nella
+// sessione annidata.
+//
+// MAPPATURA (Hyprland -> niri), solo dove non e' 1:1:
+//   ALT+H / ALT+L       focus finestra   -> focus-column-left/right  (COLONNE)
+//   ALT+J / ALT+K       focus finestra   -> focus-window-down/up     (nella colonna)
+//   ALT+S               special:magic    -> workspace "magic" (non e' un overlay)
+//   ALT+SHIFT+P         pseudo (dwindle) -> toggle-column-tabbed-display
+//   ALT+SHIFT+J         togglesplit      -> consume-or-expel-window-right
+//   ALT+M               hl.dsp.exit()    -> quit (con dialog di conferma nativo)
+//   ALT+LMB / ALT+RMB   drag/resize      -> built-in, vedi input.mod-key
+binds {
+    // Elenco degli hotkey. Non c'e' in Hyprland ma e' la via d'uscita se ci si
+    // perde: senza, dal TTY non si ha nulla a cui appellarsi.
+    Mod+Shift+Slash { show-hotkey-overlay; }
+
+    // ---- Programmi ----
+    Mod+Return { spawn "ghostty"; }
+    Mod+E      { spawn "ghostty" "-e" "yazi"; }
+    // La tilde va espansa dalla shell, quindi spawn-sh e non spawn.
+    Mod+D      { spawn-sh "ghostty -e yazi ~/Downloads"; }
+    // Override del default niri (switch-layout): il cambio layout resta su
+    // grp:lwin_toggle come in Hyprland.
+    Mod+Space  { spawn "walker"; }
+    Mod+B      { spawn-sh "~/.local/bin/browser-amd-env brave"; }
+
+    // ---- Finestre ----
+    Mod+C repeat=false { close-window; }
+    Mod+V { toggle-window-floating; }
+    // Rimappati: in niri non esistono pseudo-tiling ne' split dell'albero.
+    // L'analogo piu' vicino e' rispettivamente la colonna a schede e il
+    // consumo/espulsione di una finestra dalla colonna.
+    Mod+Shift+P { toggle-column-tabbed-display; }
+    Mod+Shift+J { consume-or-expel-window-right; }
+
+    // ---- Focus (vim-like) ----
+    // ATTENZIONE alla semantica: orizzontale = colonne, verticale = finestre
+    // dentro la colonna corrente.
+    Mod+H { focus-column-left; }
+    Mod+L { focus-column-right; }
+    Mod+K { focus-window-up; }
+    Mod+J { focus-window-down; }
+
+    // ---- Workspace 1-10 (il tasto 0 e' il decimo, come in hyprland.lua) ----
+    Mod+1 { focus-workspace "1"; }
+    Mod+2 { focus-workspace "2"; }
+    Mod+3 { focus-workspace "3"; }
+    Mod+4 { focus-workspace "4"; }
+    Mod+5 { focus-workspace "5"; }
+    Mod+6 { focus-workspace "6"; }
+    Mod+7 { focus-workspace "7"; }
+    Mod+8 { focus-workspace "8"; }
+    Mod+9 { focus-workspace "9"; }
+    Mod+0 { focus-workspace "10"; }
+
+    // Sposta l'intera COLONNA, non la singola finestra: e' l'analogo piu' vicino
+    // a hl.dsp.window.move() in un layout a colonne. Per la sola finestra
+    // esiste move-window-to-workspace.
+    Mod+Shift+1 { move-column-to-workspace "1"; }
+    Mod+Shift+2 { move-column-to-workspace "2"; }
+    Mod+Shift+3 { move-column-to-workspace "3"; }
+    Mod+Shift+4 { move-column-to-workspace "4"; }
+    Mod+Shift+5 { move-column-to-workspace "5"; }
+    Mod+Shift+6 { move-column-to-workspace "6"; }
+    Mod+Shift+7 { move-column-to-workspace "7"; }
+    Mod+Shift+8 { move-column-to-workspace "8"; }
+    Mod+Shift+9 { move-column-to-workspace "9"; }
+    Mod+Shift+0 { move-column-to-workspace "10"; }
+
+    // ---- Scratchpad ----
+    Mod+S       { focus-workspace "magic"; }
+    Mod+Shift+S { move-column-to-workspace "magic"; }
+
+    // ---- Scroll tra i workspace (== ALT + rotella in hyprland.lua) ----
+    Mod+WheelScrollDown cooldown-ms=150 { focus-workspace-down; }
+    Mod+WheelScrollUp   cooldown-ms=150 { focus-workspace-up; }
+
+    // ---- Screenshot ----
+    // Comando invariato rispetto a hyprland.lua per fedelta'. niri ha
+    // un'azione `screenshot` nativa (con selezione interattiva) se si
+    // preferisce togliere la dipendenza da grim/slurp.
+    Mod+P { spawn-sh r#"grim -g "$(slurp)" - | wl-copy -t image/png && notify-send "Image copied to clipboard" -t 3000"#; }
+
+    // ---- Sessione ----
+    Mod+M { quit; }                        // dialog di conferma nativo
+    Mod+Backspace { spawn-sh "wlogout -b 5 -T 348 -B 348 -n -C ~/.config/wlogout/style.css"; }
+    // hyprlock usa ext-session-lock-v1, protocollo supportato da niri.
+    Ctrl+Mod+L { spawn "hyprlock"; }
+    Mod+Shift+N { spawn "swaync-client" "-t" "-sw"; }
+    // Riavvia la shell QML. Serve di rado: quickshell ricarica da se' i .qml al
+    // salvataggio; resta utile se il processo muore del tutto.
+    Mod+Shift+B { spawn-sh "pkill -x qs; sleep 0.3; qs -c ale"; }
+    // Escape hatch per le app che inibiscono le scorciatoie (client remoti, KVM
+    // software). Non ha equivalente in hyprland.lua ma senza, una app buggata
+    // puo' tenere in ostaggio la sessione.
+    Mod+Escape allow-inhibiting=false { toggle-keyboard-shortcuts-inhibit; }
+
+    // ---- Clipboard e dettatura ----
+    Ctrl+Mod+V { spawn "copyq" "toggle"; }
+    // OpenWhispr: il servizio D-Bus com.openwhispr.App e' indipendente dal
+    // compositore, quindi questo bind e' portabile tal quale. Solo modalita'
+    // toggle: l'interfaccia non espone press/release (niente hold-to-talk).
+    Ctrl+Mod+D { spawn-sh "dbus-send --session --type=method_call --dest=com.openwhispr.App /com/openwhispr/App com.openwhispr.App.Toggle"; }
+
+    // ---- Window switcher ----
+    // Mod+Tab NON e' dichiarato qui: lo gestisce il blocco `recent-windows` in
+    // fondo al file (switcher nativo con preview). Un bind Mod+Tab in questo
+    // blocco lo oscurerebbe.
+    //
+    // snappy-switcher, usato in Hyprland, e' stato RIMOSSO: e' HYPRLAND-ONLY --
+    // il binario cerca HYPRLAND_INSTANCE_SIGNATURE e parla
+    // $XDG_RUNTIME_DIR/hypr/$HIS/.socket.sock (verificato con `strings`), quindi
+    // qui era inerte ("[Hyprland] HYPRLAND_INSTANCE_SIGNATURE ... not set").
+    //
+    // Vista d'insieme (default niri, non presente in Hyprland). Funzione distinta
+    // dallo switcher: zoom-out su workspace e finestre, con drag&drop.
+    Mod+O repeat=false { toggle-overview; }
+
+    // ---- Tema e wallpaper ----
+    // Pipeline pywal COMPLETA anche qui. Il focus-ring segue la palette via
+    // gen_niri_wal_colors.sh (chiamato da apply_theme.sh e update_theme.sh) ->
+    // ~/.config/niri/wal-colors.kdl -> `include` sorvegliato da niri, che
+    // ricarica da sé. Lo `hyprctl reload` dello step 5 di apply_theme.sh
+    // fallisce sotto niri, ma è silenziato e ormai irrilevante.
+    // Il resto era già compositor-agnostic: GTK/libadwaita, kitty (socket),
+    // nvim (SIGUSR1), walker, wlogout, swaync, yazi, Brave.
+    Mod+Shift+T { spawn "/home/ale/dotfiles/hyprland/.config/hypr/scripts/toggle_theme.sh"; }
+    // select_wallpaper.sh è compositor-aware: con NIRI_SOCKET valorizzato usa
+    // `awww img` invece di `hyprctl hyprpaper`, che qui non ha socket a cui
+    // parlare. La persistenza passa da ~/.cache/wal/wal (vedi spawn-at-startup).
+    Mod+W { spawn "/home/ale/.config/hypr/scripts/select_wallpaper.sh"; }
+
+    // ---- Multimedia ----
+    // In Hyprland erano { locked = true, repeating = true }. In niri
+    // allow-when-locked=true copre il primo; la ripetizione su pressione
+    // prolungata e' gia' il comportamento di default.
+    XF86AudioRaiseVolume allow-when-locked=true { spawn-sh "wpctl set-volume -l 1 @DEFAULT_AUDIO_SINK@ 5%+"; }
+    XF86AudioLowerVolume allow-when-locked=true { spawn-sh "wpctl set-volume @DEFAULT_AUDIO_SINK@ 5%-"; }
+    XF86AudioMicMute     allow-when-locked=true { spawn-sh "wpctl set-mute @DEFAULT_AUDIO_SOURCE@ toggle"; }
+    XF86AudioMute        allow-when-locked=true { spawn-sh r#"wpctl set-mute @DEFAULT_AUDIO_SINK@ toggle && notify-send -h string:x-canonical-private-synchronous:sys-notify -u low -i audio-volume-muted "Audio Muted""#; }
+
+    XF86MonBrightnessUp   allow-when-locked=true { spawn "brightnessctl" "set" "5%+"; }
+    XF86MonBrightnessDown allow-when-locked=true { spawn "brightnessctl" "set" "5%-"; }
+
+    XF86AudioNext  allow-when-locked=true { spawn "playerctl" "next"; }
+    XF86AudioPause allow-when-locked=true { spawn "playerctl" "play-pause"; }
+    XF86AudioPlay  allow-when-locked=true { spawn "playerctl" "play-pause"; }
+    XF86AudioPrev  allow-when-locked=true { spawn "playerctl" "previous"; }
+}
+
+// -----------------------
+// ---- RECENT WINDOWS ---
+// -----------------------
+// Switcher Alt+Tab NATIVO di niri (con preview delle finestre), sostituto di
+// snappy-switcher -- che era Hyprland-only e quindi inerte qui.
+//
+// La sezione e' attiva per default (si disattiva con `off`) e porta i propri
+// bind, dichiarati qui ESPLICITAMENTE: nel blocco `binds` sopra non deve
+// esistere un Mod+Tab, o lo oscurerebbe.
+//
+// `filter="app-id"` cicla solo tra le finestre della stessa applicazione, cosa
+// che Hyprland non offriva.
+recent-windows {
+    binds {
+        Mod+Tab         { next-window; }
+        Mod+Shift+Tab   { previous-window; }
+        Mod+grave       { next-window     filter="app-id"; }
+        Mod+Shift+grave { previous-window filter="app-id"; }
+    }
+}
+
+// --------------------
+// ---- WINDOW RULES --
+// --------------------
+// Portate solo quelle senza equivalente implicito. Le regole di opacity e
+// tearing di hyprland.lua:399-486 sono fuori scope (niri non ha allow_tearing
+// per-finestra nella stessa forma, e il repo usa comunque opacity 1.0/1.0).
+
+// Privacy screen-share: la finestra viene oscurata nella cattura ma resta
+// visibile in locale. Equivalente di no_screen_share.
+window-rule {
+    match app-id=r#"^(com\.github\.hluk\.copyq|copyq)$"#
+    match app-id=r#"^org\.keepassxc\.KeePassXC$"#
+    match app-id=r#"^Bitwarden$"#
+    match app-id=r#"^1Password$"#
+    block-out-from "screen-capture"
+}
+
+// wallpaper-picker: float centrato al 60% dello schermo (da hyprland.lua:418).
+window-rule {
+    match app-id=r#"^wallpaper-picker$"#
+    open-floating true
+    default-column-width { proportion 0.6; }
+}

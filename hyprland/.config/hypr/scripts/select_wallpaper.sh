@@ -26,16 +26,35 @@ if [[ "$SELECTED" == *.avif ]]; then
     DISPLAY_PATH="$CONVERTED_PATH"
 fi
 
-# 1. Aggiornamento Live per tutti i monitor
-hyprctl hyprpaper preload "$DISPLAY_PATH"
-for monitor in $(hyprctl monitors -j | jq -r '.[].name'); do
-    hyprctl hyprpaper wallpaper "$monitor,$DISPLAY_PATH"
-done
+# 1. Aggiornamento Live, con il canale del compositore in uso.
+#
+#    Il discriminante è la variabile del socket IPC, NON XDG_SESSION_*: quelle le
+#    imposta pam_systemd anche su un login getty e non distinguono nulla.
+#
+#    Sotto niri hyprpaper DISEGNA (è un client layer-shell come altri) ma è
+#    IRRAGGIUNGIBILE: il suo socket vive in $XDG_RUNTIME_DIR/hypr/$HIS/, che senza
+#    un'istanza Hyprland non esiste affatto — `hyprctl hyprpaper` non ha canale e
+#    lo sfondo resta quello di hyprpaper.conf per tutta la sessione. Da qui awww
+#    (ex swww: pacchetto `awww`, Provides/Replaces swww), che ha una CLI propria e
+#    non dipende dal compositore. Senza `-o` applica a tutti gli output.
+if [[ -n "$NIRI_SOCKET" ]]; then
+    awww img "$DISPLAY_PATH"
+else
+    hyprctl hyprpaper preload "$DISPLAY_PATH"
+    for monitor in $(hyprctl monitors -j | jq -r '.[].name'); do
+        hyprctl hyprpaper wallpaper "$monitor,$DISPLAY_PATH"
+    done
+fi
 
-# 2. Aggiornamento Tema (pywal)
+# 2. Aggiornamento Tema (pywal). Rigenera la palette e, tra l'altro, aggiorna
+#    ~/.cache/wal/wal — che è la persistenza del ramo niri (vedi sotto).
 ~/.config/hypr/scripts/update_theme.sh "$FULL_PATH"
 
-# 3. Persistenza
-sed -i "s|path = .*|path = $DISPLAY_PATH|" "$HOME/.config/hypr/hyprpaper.conf"
+# 3. Persistenza. Solo per hyprpaper, che legge il percorso dalla propria config:
+#    sotto niri lo sfondo viene ripristinato all'avvio da ~/.cache/wal/wal, che lo
+#    step 2 ha appena riscritto (vedi spawn-at-startup in niri/config.kdl).
+if [[ -z "$NIRI_SOCKET" ]]; then
+    sed -i "s|path = .*|path = $DISPLAY_PATH|" "$HOME/.config/hypr/hyprpaper.conf"
+fi
 
 notify-send "Sfondo aggiornato" "$SELECTED" -i "$DISPLAY_PATH"

@@ -65,6 +65,11 @@ return {
 }
 EOF
 
+# 4b. Focus-ring pywal per niri. Delegato allo script perché lo stesso frammento
+#     serve anche a update_theme.sh (cambio wallpaper, ALT+W); i dettagli — e il
+#     perché non serva alcun reload — sono documentati là.
+~/.config/hypr/scripts/gen_niri_wal_colors.sh
+
 # 5. Ricarica Hyprland (ri-esegue hyprland.lua → rilegge wal-colors.lua via require)
 hyprctl reload >/dev/null 2>&1
 

@@ -204,10 +204,36 @@ Both are LazyVim-based: plugins live under `lua/plugins/*.lua`, pinned in
 - **Login shell is fish** (`fish/` package → `~/.config/fish/config.fish`; set via
   `chsh` in `45-shell.sh`). `config.fish` is the fish port of `zsh/.zshrc` **and**
   `~/.zprofile`: the TTY1 `exec start-hyprland` autostart guard lives inside its
-  `status is-login` block — **without it, changing the login shell breaks Hyprland
-  autostart** (fish never reads `.zprofile`). `zsh/` is kept as a working fallback
-  (`chsh -s /usr/bin/zsh` to revert). Do **not** put secrets in the tracked
-  `config.fish` — use a gitignored `~/.config/fish/conf.d/*.fish`.
+  `status is-login` block (fish never reads `.zprofile`). That guard is now only the
+  **fallback** for a DM-less boot — the normal path is ly (next entry), which
+  `Conflicts=getty@tty1`, so a plain getty login on TTY1 cannot happen while
+  `ly@tty1.service` is enabled. `~/.config/fish` is a **directory symlink** into the
+  repo (like `~/.config/hypr`), so edits are live with no `stow -R`. `zsh/` is kept as
+  a working fallback (`chsh -s /usr/bin/zsh` to revert) — note `~/.zprofile` is
+  **untracked**, so the guard must be re-created there by hand. Do **not** put secrets
+  in the tracked `config.fish` — use a gitignored `~/.config/fish/conf.d/*.fish`.
+- **Display manager is ly on TTY1 — and the fish login guard used to hijack every
+  session it launched.** `ly@tty1.service` (template `ly@.service`, package `ly-git`)
+  is the enabled unit; there is no `display-manager.service`. Sessions come from
+  `/usr/share/wayland-sessions` (`hyprland.desktop`, `hyprland-uwsm.desktop`,
+  `niri.desktop`), cycled with ←/→ in the `session` field — **one at a time**, so a
+  missing entry is usually just an un-cycled list. `/usr/share/xsessions` does not
+  exist; the resulting `failed to crawl x11 session directory` in `/var/log/ly.log` is
+  harmless. The non-obvious part: ly runs the choice as
+  `$SHELL -c "/etc/ly/setup.sh <session>"`, and `setup.sh`'s `*/fish)` branch calls
+  `$SHELL --login -c …` **only to export the login environment**. That login fish sees
+  empty `DISPLAY` + `tty` = `/dev/tty1` → hit the old guard → `exec start-hyprland`,
+  which **never returns**, so `setup.sh` never reached its final `exec "$@"`:
+  **whatever** you picked in the menu (Niri included) started Hyprland. Verified from
+  `ps --forest`: `ly-dm → fish -c → /bin/sh /etc/ly/setup.sh → start-hyprland`. Fixed
+  by adding `and not pgrep -x ly-dm >/dev/null` to the guard — `XDG_SESSION_TYPE`/
+  `XDG_SESSION_ID` are **not** usable discriminators, `pam_systemd` sets them on a bare
+  getty login too. General rule: anything a login shell `exec`s hijacks the DM's chosen
+  session, because the DM sources that shell for its environment. Ground truth for what
+  actually ran is the `executing:` line at the tail of `/var/log/ly.log`.
+  Under **Niri** the session entry is `Exec=niri-session`, which drives `systemd --user`
+  to `graphical-session.target` on its own → the `hyprland-session.target` workaround
+  (see the xdg-desktop-portal entry) is Hyprland-only and not needed there.
 - **Default terminal is ghostty.** Config: `ghostty/.config/ghostty/config` (must be
   named `config`, *no* extension — ghostty ignores any other name). Set three ways:
   Hyprland `$mod+Return` keybind (`hyprland.lua`), freedesktop
@@ -269,6 +295,61 @@ Both are LazyVim-based: plugins live under `lua/plugins/*.lua`, pinned in
   fail **loudly but non-fatally**, so a script that doesn't check the output will
   silently do nothing. `exec_cmd` is the way to test a keybind from the compositor's
   own environment rather than from a shell that may have inherited stale vars.
+- **Apps that self-register a Hyprland keybind are inert here — integrate them by
+  hand via their IPC channel.** Corollary of the two entries above, and the failure
+  is **silent from the user's side**. Third-party apps typically try `hyprctl keyword
+  bind` (rejected by the Lua parser) and, as a persistence fallback, write their own
+  `*.conf` into `~/.config/hypr/` plus an appended `source = ./that.conf` in
+  `hyprland.conf` — which Hyprland ignores entirely once `hyprland.lua` exists. Both
+  paths dead-end. Worse, that append lands in a **git-tracked** file, because
+  `~/.config/hypr` is a directory symlink into the repo. The fix is never to patch the
+  app: find the channel it *actually* triggers on (D-Bus, socket, CLI) — the keybind is
+  only a thin `exec` in front of it — and declare `hl.bind(...)` yourself in
+  `hyprland.lua`. **OpenWhispr** is the worked example: `src/helpers/hyprlandShortcut.js`
+  binds `exec dbus-send … com.openwhispr.App.Toggle`, so `CTRL + SUPER + D` calls that
+  method directly. Consequence of going through D-Bus: only *toggle* mode, no
+  hold-to-talk (the interface exposes no press/release pair). Add the app's stray conf
+  to `.gitignore` and check `git diff hyprland/.config/hypr/hyprland.conf` after its
+  first run. Verified: it *does* append the line (at the end of `hyprland.conf`) — remove
+  that single line with an edit, **not** `git checkout`, or you lose the file's other
+  uncommitted changes.
+- **OpenWhispr's "Wayland Paste Setup" nag is cosmetic here — `wtype` already covers it,
+  and upstream's fix would not work on Arch.** The app bundles
+  `/opt/openwhispr/resources/bin/linux-fast-paste`, tries it *first*
+  (`clipboard.js:1535`), and on Wayland that binary wants to write `/dev/uinput`; only on
+  failure does it fall through to the `wtype → xdotool → ydotool` chain, where **wtype is
+  priority 1** on wlroots (`clipboard.js:1799-1810`, gated on `HYPRLAND_INSTANCE_SIGNATURE`).
+  So dictation works with `wtype` alone, no privileges — the warning just means the
+  preferred path is unavailable. **Do not follow the upstream docs' `sudo usermod -aG input
+  $USER`:** the check is `fs.accessSync("/dev/uinput", W_OK)` and on this machine the node
+  is `crw------- root:root` — mode 0600, **no group at all**, with no udev rule for `uinput`
+  in `/etc/udev/rules.d/` or `/usr/lib/udev/rules.d/` and the `input` group (gid 992) empty.
+  Joining the group changes nothing; it would take a udev rule *plus* the group. Deliberately
+  not done — granting uinput lets any process of this user inject input kernel-side for the
+  whole session. Health check for wtype: `wtype ''` exits 0 (it binds
+  `zwp_virtual_keyboard_manager_v1`; it errors out if the compositor lacks the protocol).
+- **Building `openwhispr-vulkan` (or any ggml-Vulkan AUR package) needs
+  `ulimit -s 2048`.** Install with
+  `bash -c 'ulimit -s 2048 && paru -S openwhispr-vulkan'`. Without it the link dies on
+  hundreds of `undefined reference to matmul_id_subgroup_*_len/_data`, which reads like
+  a missing SPIR-V extension and is **not**: `vulkan-shaders-gen` spawns one
+  `std::async` per shader variant (~2800) and never destroys the futures, so every
+  finished thread's **8 MB stack stays mapped** — VmSize climbs to **21.7 GB** while
+  VmRSS sits at 16 MB. This machine's commit limit is RAM 14 GiB + zram 7.4 GiB ≈
+  **21.4 GiB**, so past that point `fork()` for glslc returns ENOMEM. Dropping
+  `RLIMIT_STACK` to 2 MB (glibc uses it as the default thread stack size) caps VmSize at
+  **4.5 GB** and the errors go to zero — measured, both arms. Two traps: the generator
+  **exits 0** despite ~800 failed compiles, and with an empty `input_filepath` it emits
+  the header for *every* variant ungated, so the `.hpp` declares 2789 symbols while only
+  2392 `.spv` exist — the mismatch only surfaces at link time, ~20 min later.
+  The failures are *all and only* the `subgroup` family, which looks like an unsupported
+  feature but merely reflects queue position (`process_shaders()` iterates
+  `NONE → DEFAULT → SUBGROUP`). Nothing to do with shaderc/glslang version — 1.4.357 is
+  current. Not fixable via env var: the concurrency cap is a hardcoded
+  `min(16, hardware_concurrency())`, and lowering it with `taskset` does **not** help
+  (tested: same 812 failures) because the leak is total-threads-created, not
+  threads-in-flight. If gcc then OOMs on the 161 MB generated TUs, prefix `taskset -c 0-7`
+  to halve `make -j$(nproc)`.
 - **Window focus cue is the border, not opacity.** The `kitty-opacity`/`ghostty-opacity`
   window rules are `1.0 1.0` (no defocus dimming — full opacity active *and* inactive;
   kitty/ghostty keep their own `background_opacity`). Focus is shown by
@@ -296,24 +377,138 @@ Both are LazyVim-based: plugins live under `lua/plugins/*.lua`, pinned in
   *priority* from `/usr/share/glvnd/egl_vendor.d/`: `10_nvidia.json` outranks
   `50_mesa.json`, so with a clean env a Wayland client still lands on the dGPU **by itself**
   (verified: `eglinfo` on the Wayland platform reported `NVIDIA GeForce RTX 5060`, not the
-  780M). Hence `hyprland.lua` pins
-  `__EGL_VENDOR_LIBRARY_FILENAMES=/usr/share/glvnd/egl_vendor.d/50_mesa.json` (EGL init
-  ~190-266 ms → ~106-117 ms). Corollary: an **EGL** offload to the dGPU must `env -u` that
-  variable — `__NV_PRIME_RENDER_OFFLOAD` alone is not enough (`distrobox/.local/bin/matlab`
-  does this). GLX offload (`prime-run`) and CUDA are unaffected.
-  `AQ_FORCE_LINEAR_BLIT=0` **stays**: it is an
+  780M). Pinning `__EGL_VENDOR_LIBRARY_FILENAMES` to Mesa took EGL init from
+  ~190-266 ms to ~106-117 ms — but it **must not be set via `hl.env`**, because that also
+  pins the compositor and breaks the HDMI output (see the next entry). It now lives only in
+  the `dbus-update-activation-environment` line in `hyprland.lua` (D-Bus/systemd-activated
+  apps — `browser-amd-env` does **not** set it). **Dropping it from `hl.env` did not regress
+  the clients**: ghostty, which inherits the compositor's env via a keybind, still opens only
+  `/dev/dri/renderD129` (AMD) with `libEGL_mesa`+`libgallium` and no NVIDIA library — with
+  Mesa 26.1.6 a Wayland client follows the compositor's device on its own, so the quoted
+  `eglinfo` result above no longer reproduces. Corollary: an **EGL** offload to the dGPU must
+  `env -u` that variable wherever it is set — `__NV_PRIME_RENDER_OFFLOAD` alone is not
+  enough (`distrobox/.local/bin/matlab` does this). GLX offload (`prime-run`) and CUDA are
+  unaffected. `AQ_FORCE_LINEAR_BLIT=0` **stays**: it is an
   aquamarine (compositor) var, not a client one — no per-process cost, and it governs the
   multi-GPU blit that the dGPU-attached HDMI actually needs.
+- **Pinning the session to Mesa also pins the *compositor* — that breaks the HDMI output.**
+  Symptom: plug the external monitor into the laptop's HDMI port and it stays **black**
+  while the internal panel turns visibly stuttery; `hyprctl monitors` cheerfully reports
+  `HDMI-A-1` as active. Because `HDMI-A-1` hangs off the **dGPU**, aquamarine must build a
+  *second* EGL renderer on `/dev/dri/card1` to blit the AMD-rendered framebuffer over.
+  With the session pinned to Mesa that renderer never initializes — Mesa has no driver for
+  the proprietary kernel node — and the log reads
+  `[EGL] eglInitialize … DRI2: failed to load driver` → `CDRMRenderer: fail` →
+  `drm: initMgpu: no renderer` → `drm: Failed to initialize renderer backend for blitting`,
+  after which `drm: Modesetting HDMI-A-1` is retried in a loop (that loop, not a real mode
+  change, is what degrades the panel's smoothness — `hyprctl` still reports 165 Hz).
+  Two culprits, both introduced for app-launch latency. First,
+  **`__EGL_VENDOR_LIBRARY_FILENAMES` set via `hl.env`** — that writes the *compositor's*
+  environment too, not just its children. Appending `10_nvidia.json` does **not** fix it
+  (measured: the error stays `DRI2:`, i.e. Mesa): libglvnd picks the vendor **once** per
+  device and does not fall back to the next one when `eglInitialize` fails — list order
+  decides who is tried first, not a fallback chain. The variable had to be removed from
+  `hl.env` entirely and kept only on the client side. Second,
+  **`MESA_LOADER_DRIVER_OVERRIDE=radeonsi` exported globally from `config.fish`** — fish is
+  the login shell and `exec`s `start-hyprland`, so **Hyprland inherited it** (visible in
+  `/proc/$(pgrep -x Hyprland)/environ`) and Mesa was forced to load `radeonsi` on *every*
+  DRM node, NVIDIA's included. It is now removed from `config.fish`/`.zshrc` — it was
+  redundant anyway (Mesa picks `radeonsi` by itself on an amdgpu node) and survives where
+  it is actually meant to apply, passed per-command in `~/.local/bin/browser-amd-env`.
+  General rule: env vars that steer GPU selection belong on the **client** invocation, not
+  on the login shell, or the compositor silently inherits them. Note
+  `/proc/PID/environ` is the exec-time snapshot — it will not show later `hl.env` writes,
+  so absence there is not proof a var is unset in a running process.
+  Not the cause, though both were suspected first: the hotplug **is** delivered even with
+  the dGPU runtime-suspended (`card1-HDMI-A-1/status` → `connected`, so
+  `NVreg_DynamicPowerManagement=0x02` is fine), and the panel does **not** actually drop to
+  60 Hz.
+  **Verified working state**, useful as a fingerprint when this breaks again: with the HDMI
+  connected the compositor maps `libEGL_mesa`+`libgallium` (rendering on AMD) *together with*
+  `libnvidia-allocator`+`libnvidia-egl-gbm` (allocating on the NVIDIA node) — that pairing
+  **is** the multi-GPU blit. `initMgpu: no renderer` disappears and `Modesetting HDMI-A-1`
+  happens once instead of looping. Price of admission: the dGPU stays `active` for as long as
+  the cable is in (blitting 1920x1080@240 over PCIe is continuous traffic), so expect the
+  battery hit — it is inherent to a display wired to the dGPU, not a misconfiguration.
+  One diagnostic trap: an open `/dev/nvidia0` does **not** prove a client renders on the dGPU.
+  GTK4 (Vulkan renderer) and Chromium enumerate every GPU regardless — swaync opens it *while
+  carrying* the Mesa pin. Judge a client by the render node it actually uses
+  (`ls -l /proc/PID/fd | grep renderD`) plus `nvidia-glcore`, not by device presence alone.
   `~/.local/bin/browser-amd-env` predates this fix and is now a redundant safety belt.
 - **Do not start `swaync` from `hyprland.lua`.** It is D-Bus activated
   (`org.erikreider.swaync.service`) plus a systemd unit; a second instance loses the bus
   name, exits 1, and systemd restart-loops it to `start-limit-hit` → `swaync.service` left
   `failed`. Only `screenshare-inhibit.sh` is exec'd from the compositor (it polls every 3 s
   with `|| true`, so it needs no daemon-ready wait).
-- Two WM stacks coexist: Wayland (`hyprland/`, `waybar/`, `wlogout/`, `walker/`,
-  `yazi/`) and X11 (`i3/`, `polybar/`, `picom/`, `rofi/`). The theme pipeline targets
-  the Wayland stack. The `wal/` package tracks only pywal *templates*, not the runtime
-  cache.
+- Three WM stacks coexist: Wayland/Hyprland (`hyprland/`, `waybar/`, `wlogout/`,
+  `walker/`, `yazi/`), Wayland/niri (`niri/`) and X11 (`i3/`, `polybar/`, `picom/`,
+  `rofi/`). The theme pipeline targets the Hyprland stack. The `wal/` package tracks
+  only pywal *templates*, not the runtime cache.
+- **`niri/` is a keybind clone of `hyprland.lua`, not a migration.** Single file
+  `niri/.config/niri/config.kdl` (KDL); `stow niri` makes `~/.config/niri` a directory
+  symlink, so edits are live. Validate with `niri validate` **before** starting a
+  session — invalid KDL means niri refuses to start, and there is no comfortable way
+  back from a TTY; `niri` run from inside Hyprland opens a nested winit window for
+  safe testing. `input { mod-key "Alt" }` is what makes it feel like Hyprland: it is
+  not a textual alias, it also drives the **built-in mouse gestures** (Alt+LMB move,
+  Alt+RMB resize), which is why no bind replaces `hl.dsp.window.drag()/resize()`.
+  `mod-key-nested "Super"` keeps the nested session from fighting the host for Alt —
+  binds test as `Super+…` there. niri is scrollable-tiling, so `ALT+H/L` moves between
+  **columns** and `ALT+J/K` between windows *inside* a column; `special:magic` becomes
+  a real named workspace (a workspace, not an overlay), pseudo → `toggle-column-tabbed-display`,
+  togglesplit → `consume-or-expel-window-right`. Workspaces must be **named** (`"1"`…
+  `"10"` with `open-on-output`): niri workspaces are dynamic and an integer index past
+  the existing count silently collapses onto the last empty one, losing the per-monitor
+  assignment of `workspaces.lua`. Output names (`eDP-2`/`HDMI-A-1`) are Hyprland's —
+  confirm with `niri msg outputs`, since a mismatched connector name makes the `output`
+  nodes **silently** inert.
+  **`mode` matching is exact-string, three decimals, and it fails silently.** The HDMI
+  ran at 60 Hz for a while because the config said `1920x1080@239.960` while the
+  connector enumerates `239.964`; there is no nearest-match. `niri validate` still
+  answers `config is valid` — the only trace is
+  `journalctl --user -b -t niri | grep "could not be found"` →
+  `WARN configured mode … could not be found, falling back to preferred`, and the
+  preferred mode of a high-refresh monitor is usually 60 Hz. **Copy** the refresh from
+  `niri msg outputs`, never retype it. Same warning class as a mismatched connector name.
+  Two Hyprland-only limits remain: `snappy-switcher` (the binary looks for
+  `HYPRLAND_INSTANCE_SIGNATURE` — verified with `strings`) so its binds were **removed**
+  in favour of niri's native `recent-windows` switcher (Alt+Tab with window previews,
+  `filter="app-id"` to cycle within one app; it is on by default and carries its own
+  `binds` block — a `Mod+Tab` in the global `binds` would shadow it), and `qs -c ale`
+  (`quickshell/.config/quickshell/ale/workspaces/Workspaces.qml` imports
+  `Quickshell.Hyprland` → the bar starts but the workspace module has no data).
+  `xwayland-satellite` is **not installed** (`WARN … error spawning xwayland-satellite,
+  disabling integration`) → **no X11 client can start** under niri, unlike Hyprland's
+  built-in Xwayland.
+  **The pywal fan-out is now complete under niri too, via `include`, not IPC.** niri has
+  no action for colors, but it **watches every included file** and live-reloads on change
+  — so writing the fragment *is* applying the theme, no reload command.
+  `hyprland/.config/hypr/scripts/gen_niri_wal_colors.sh` renders
+  `~/.config/niri/wal-colors.kdl` (generated, gitignored) and is called from **both**
+  `apply_theme.sh` (step 4b, dark/light toggle) and `update_theme.sh` (wallpaper change)
+  — extracted precisely because hooking only the first would leave the focus ring
+  stale on `ALT+W`. `config.kdl` carries `include optional=true "wal-colors.kdl"`
+  **after** its own `layout {}`: KDL sections do **not** merge recursively, the last
+  definition of a section wins (only `binds` merges per-key), so the include overrides
+  the static `focus-ring` while that stays the fallback when the file is missing — the
+  same shape as `hyprland.lua`'s static fallback next to `require "wal-colors"`.
+  **Wallpaper under niri is `awww`, not hyprpaper — hyprpaper draws but is unreachable.**
+  hyprpaper is an ordinary layer-shell client so it paints fine, but its IPC socket lives
+  in `$XDG_RUNTIME_DIR/hypr/$HIS/`, which does not exist without a Hyprland instance
+  (`/run/user/1000/hypr/` absent) → `hyprctl hyprpaper preload/wallpaper` has no channel
+  and the wallpaper would stay pinned to `hyprpaper.conf` all session. `awww` is swww
+  **renamed** (Arch package `awww`, `Provides`/`Replaces: swww`, upstream
+  `codeberg.org/LGFae/awww`); binaries are `awww` + `awww-daemon`, and `awww img` without
+  `-o` applies to every output. `select_wallpaper.sh` branches on **`NIRI_SOCKET`** (never
+  `XDG_SESSION_*` — `pam_systemd` sets those on a bare getty login too) and skips the
+  `sed` on `hyprpaper.conf`; persistence across restarts rides on `~/.cache/wal/wal`,
+  which `wal` rewrites on every wallpaper change and `spawn-sh-at-startup` reads back.
+  **`focus-follows-mouse` needs `max-scroll-amount`.** Absent by default (Hyprland has
+  `follow_mouse=1`), and in scrollable-tiling an unbounded ffm makes the **strip scroll**
+  as soon as the pointer reaches a partly-offscreen column — the view slides out from
+  under the mouse. The value is a percentage of the working-area width; `"0%"` means
+  "focus only when no scrolling is needed", the closest thing to Hyprland, which has no
+  scrollable viewport.
 - **Hyprland main config is Lua, not hyprlang.** Since Hyprland 0.55 hyprlang
   (`.conf`) is deprecated; the compositor config lives in
   `hyprland/.config/hypr/hyprland.lua` (+ `monitors.lua`, `workspaces.lua` via

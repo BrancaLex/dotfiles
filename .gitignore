@@ -1,0 +1,36 @@
+# Yazi theme.toml è GENERATO da apply_theme.sh (render del template colors-yazi.toml).
+# Tracciamo solo il template (wal/.../colors-yazi.toml) e yazi.toml, non l'output.
+yazi/.config/yazi/theme.toml
+
+# Walker theme style.css è GENERATO da apply_theme.sh
+# (concatenazione ~/.cache/wal/colors-walker.css + themes/pywal/style-body.css).
+# Tracciamo solo il template (style-body.css), non l'output.
+walker/.config/walker/themes/pywal/style.css
+
+# wlogout style.css è GENERATO da apply_theme.sh
+# (concatenazione ~/.cache/wal/colors-wlogout.css + style-body.css).
+# Tracciamo solo il template (style-body.css), non l'output.
+wlogout/.config/wlogout/style.css
+
+# swaync style.css è GENERATO da apply_theme.sh
+# (concatenazione ~/.cache/wal/colors-swaync.css + style-body.css).
+# Tracciamo solo il template (style-body.css) e config.json, non l'output.
+swaync/.config/swaync/style.css
+
+# Bordi pywal per hyprland.lua: modulo Lua GENERATO da apply_theme.sh
+# (require sandbox-safe). Solo il fallback statico in hyprland.lua è tracciato.
+hyprland/.config/hypr/wal-colors.lua
+
+# OpenWhispr scrive qui il proprio bind quando tenta l'auto-registrazione.
+# Sotto il parser Lua il file è inerte (nessun source lo carica): il bind vero è
+# dichiarato a mano in hyprland.lua. Non va tracciato.
+hyprland/.config/hypr/openwhispr-binds.conf
+
+# Log transitorio prodotto da bootstrap.sh
+bootstrap.log
+
+# Focus-ring pywal per niri: frammento KDL GENERATO da apply_theme.sh (step 4b) e
+# caricato via `include optional=true`. ~/.config/niri è un symlink di directory
+# nel repo, quindi senza questa riga il file generato comparirebbe tra le
+# modifiche tracciate. Solo il fallback statico in config.kdl è tracciato.
+niri/.config/niri/wal-colors.kdl
