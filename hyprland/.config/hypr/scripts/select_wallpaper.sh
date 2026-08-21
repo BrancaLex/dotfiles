@@ -16,8 +16,11 @@ FULL_PATH="$WALL_DIR/$SELECTED"
 
 CACHE_DIR="$HOME/.cache/hyprpaper"
 mkdir -p "$CACHE_DIR"
+# La conversione AVIF serve solo a hyprpaper, che non legge quel formato; awww lo
+# decodifica da sé (dipende da dav1d), quindi sotto niri si passa l'originale e si
+# risparmia una invocazione di `magick`.
 DISPLAY_PATH="$FULL_PATH"
-if [[ "$SELECTED" == *.avif ]]; then
+if [[ "$SELECTED" == *.avif && -z "$NIRI_SOCKET" ]]; then
     CONVERTED_NAME="${SELECTED%.avif}.webp"
     CONVERTED_PATH="$CACHE_DIR/$CONVERTED_NAME"
     if [[ ! -f "$CONVERTED_PATH" || "$FULL_PATH" -nt "$CONVERTED_PATH" ]]; then

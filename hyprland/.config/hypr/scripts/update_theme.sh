@@ -17,21 +17,19 @@ LIGHT_FLAG=""
 wal -i "$WALLPAPER" -n -q --backend colorz $LIGHT_FLAG
 pkill -USR1 kitty
 
-# 3. Ricarica Waybar
-pkill waybar
-waybar & disown
+# 3. (rimosso) Waybar non esiste piu': la barra e' quickshell, che osserva
+#    ~/.cache/wal/colors.json con FileView(watchChanges) e si ri-colora da se'
+#    appena `wal` lo riscrive. Il vecchio `pkill waybar; waybar & disown` avviava
+#    una barra fantasma a ogni ALT+W. Allineato ad apply_theme.sh step 6.
 
-# 4. Aggiorna i bordi di Hyprland
-# 4b. Focus-ring pywal per niri (vedi gen_niri_wal_colors.sh: niri ricarica da sé
-#     i file inclusi, quindi scrivere il frammento basta). Senza questa riga il
-#     focus-ring seguirebbe il toggle dark/light ma NON il cambio di wallpaper.
+# 4. Bordi/focus-ring pywal, un percorso per compositore. Entrambi gli script
+#    ricalcolano la palette da soli e sono no-op sul compositore sbagliato, quindi
+#    si chiamano incondizionatamente. Sostituiscono il vecchio
+#    `hyprctl keyword general:col.active_border`, inerte sotto il parser Lua.
+~/.config/hypr/scripts/gen_hypr_wal_colors.sh
 ~/.config/hypr/scripts/gen_niri_wal_colors.sh
 
 ACCENT=$(cat ~/.cache/wal/colors.json | jq -r '.colors.color4' | sed 's/#//')
-SECONDARY=$(cat ~/.cache/wal/colors.json | jq -r '.colors.color2' | sed 's/#//')
-COLOR1="ff$ACCENT"
-COLOR2="ff$SECONDARY"
-hyprctl keyword general:col.active_border "rgba($COLOR1) rgba($COLOR2) 45deg"
 
 # 5. Genera tema per Brave
 ~/ChromiumPywal/generate-theme.sh

@@ -49,29 +49,16 @@ dbus-send --session --dest=org.freedesktop.portal.Desktop \
     string:"color-scheme" \
     variant:uint32:${SCHEME_VAL} 2>/dev/null || true
 
-# 4. Bordi finestra pywal per il backend Lua. `hyprctl keyword` NON funziona sotto
-#    il parser Lua ("non-legacy"), e il backend è sandboxato (no io/os) → non può
-#    leggere ~/.cache/wal. Generiamo quindi un modulo Lua require-abile in
-#    ~/.config/hypr e ricarichiamo: hyprland.lua lo rilegge via require (color4=
-#    accento, color2=secondario; inattivo = secondario smorzato ~40% alpha, così il
-#    focus resta leggibile senza dimming di opacità sul defocus).
-ACCENT=$(jq -r '.colors.color4' ~/.cache/wal/colors.json | sed 's/#//')
-SECONDARY=$(jq -r '.colors.color2' ~/.cache/wal/colors.json | sed 's/#//')
-cat > ~/.config/hypr/wal-colors.lua <<EOF
--- Generato da apply_theme.sh — bordi pywal per hyprland.lua (NON tracciato).
-return {
-  active = { "rgba(${ACCENT}ff)", "rgba(${SECONDARY}ff)" },
-  inactive = "rgba(${SECONDARY}66)",
-}
-EOF
-
-# 4b. Focus-ring pywal per niri. Delegato allo script perché lo stesso frammento
-#     serve anche a update_theme.sh (cambio wallpaper, ALT+W); i dettagli — e il
-#     perché non serva alcun reload — sono documentati là.
+# 4. Bordi/focus-ring pywal, un percorso per compositore (vedi i due script per il
+#    perché: `hyprctl keyword` non funziona sotto il parser Lua, il backend Lua è
+#    sandboxato, e niri non ha IPC per i colori ma sorveglia i file inclusi).
+#    gen_hypr_wal_colors.sh ricarica Hyprland da sé, dopo aver scritto il modulo:
+#    l'ordine conta, hyprland.lua lo rilegge via require al reload.
+~/.config/hypr/scripts/gen_hypr_wal_colors.sh
 ~/.config/hypr/scripts/gen_niri_wal_colors.sh
 
-# 5. Ricarica Hyprland (ri-esegue hyprland.lua → rilegge wal-colors.lua via require)
-hyprctl reload >/dev/null 2>&1
+# 5. ACCENT serve ancora allo step 10 (Aura RGB della tastiera ASUS).
+ACCENT=$(jq -r '.colors.color4' ~/.cache/wal/colors.json | sed 's/#//')
 
 # 6. (rimosso) Waybar non esiste piu': la barra e' quickshell, che osserva
 #    ~/.cache/wal/colors.json con FileView(watchChanges) e si ri-colora da se'
