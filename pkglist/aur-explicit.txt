@@ -2,8 +2,11 @@
 # Il PKGBUILD AUR non compila cosi' com'e' (paru abortisce su `zig<0.16.0`),
 # quindi qui il bootstrap fallirebbe e la macchina resterebbe senza terminale.
 # Il manifest pacman tiene percio' `ghostty` dei repo; l'upgrade e' manuale:
-# vedi aur/ghostty-git/README.md. Da riapplicare dopo ogni capture-system.sh.
+# vedi aur/ghostty-git/README.md. capture-system.sh riapplica questa eccezione da solo.
 claude-desktop-bin
+cliamp
+clion
+clion-jre
 elephant-bin
 elephant-clipboard-bin
 elephant-desktopapplications-bin
@@ -12,8 +15,12 @@ elephant-providerlist-bin
 elephant-todo-bin
 elephant-websearch-bin
 github-cli-git
+gromit-mpx
 hidapitester-git
+kgamma
+kwin-x11
 ly-git
+neofetch
 obsidian-bin
 openwhispr-vulkan
 orca-slicer-bin
@@ -22,7 +29,12 @@ pico-sdk
 picotool
 python-pywal
 sioyek-dev
+slack-desktop
 snappy-switcher
 spotify
+stm32cubemx
+supergfxctl
+vesktop
 vial-appimage
 visual-studio-code-bin
+wacomtablet

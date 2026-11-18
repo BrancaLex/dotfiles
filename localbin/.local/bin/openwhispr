@@ -1,0 +1,208 @@
+#!/bin/bash
+# Wrapper OpenWhispr — machine-local, NON stowato (stesso criterio di browser-amd-env).
+#
+# Perche' esiste:
+#  - --ozone-platform=wayland: senza flag Electron 41 parte su Xwayland e, con
+#    xwayland.force_zero_scaling = true (hyprland.lua), la UI renderizza a 1x sul
+#    pannello eDP-2 scalato 1.33 — stesso difetto gia' diagnosticato per le PWA Brave.
+#  - --no-sandbox: il PKGBUILD rimuove chrome-sandbox, il launcher di /usr/bin fa lo stesso.
+#
+# Precede /usr/bin/openwhispr perche' ~/.local/bin viene prima in PATH.
+#  - env -u DISPLAY: senza questo il paste automatico NON funziona. L'app calcola
+#    xwaylandAvailable = isWayland && !!process.env.DISPLAY (clipboard.js:38) e, quando
+#    e' vero, dopo il fallimento di uinput prova il fallback XTest/XWayland con il binario
+#    bundled linux-fast-paste. Misurato: `linux-fast-paste --terminal` esce 0 senza
+#    incollare nulla (spara i tasti via XTEST a un client X11 che non ha il focus, perche'
+#    le finestre in focus sono Wayland native). Il codice legge quello 0 come successo e
+#    fa return, quindi la catena wtype -> xdotool -> ydotool non viene mai raggiunta.
+#    Togliendo DISPLAY il ramo XTest sparisce, xdotool esce dai candidati e resta wtype,
+#    che sul protocollo virtual-keyboard incolla davvero. Sicuro perche' l'app gira
+#    comunque su Wayland nativo (--ozone-platform=wayland) e non le serve Xwayland.
+
+APP=/opt/openwhispr/open-whispr
+APP_FLAGS=(--no-sandbox --ozone-platform=wayland)
+RUN=(env -u DISPLAY -u __EGL_VENDOR_LIBRARY_FILENAMES)
+
+# HYPRLAND_CONFIG vale in ENTRAMBE le sessioni, non solo sotto niri: _writeBindToConfig()
+# dell'app scrive openwhispr-binds.conf in dirname(HYPRLAND_CONFIG) e appende un
+# `source = ./openwhispr-binds.conf` a hyprland.conf. Siccome ~/.config/hypr e' un symlink
+# di directory dentro il repo, quell'append finisce in un file TRACCIATO da git (successo
+# gia' una volta: riga 489 di hyprland.conf, rimossa a mano). Sotto Hyprland l'auto-bind e'
+# comunque inerte — col parser Lua hyprland.conf non viene nemmeno letto — quindi non si
+# perde niente a deviarlo in una dir scratch.
+FAKE_HYPR_DIR="$HOME/.cache/openwhispr-hypr"
+mkdir -p "$FAKE_HYPR_DIR"
+RUN+=(HYPRLAND_CONFIG="$FAKE_HYPR_DIR/hyprland.conf")
+
+# --- Sessione niri: far apparire il compositore come Hyprland al SOLO processo OpenWhispr ---
+#
+# L'app registra il servizio D-Bus com.openwhispr.App — l'unico canale su cui un bind
+# esterno puo' chiamare Toggle() — dentro HotkeyManager.initializeHyprlandShortcuts(), e
+# quel ramo e' gated su isHyprland() && isHyprctlAvailable(). Non c'e' un ramo wlroots
+# generico: sotto niri initDBusService() non viene mai chiamato, il nome resta fuori dal
+# bus e il bind Ctrl+Mod+D di config.kdl fa un dbus-send nel vuoto ("name is not
+# activatable"), in silenzio. Su Wayland non c'e' fallback: Electron globalShortcut non
+# ha grab globale.
+#
+# HYPRLAND_INSTANCE_SIGNATURE (non XDG_CURRENT_DESKTOP=Hyprland, che devierebbe anche la
+# scelta del backend xdg-desktop-portal) soddisfa isHyprland() E isWlrootsCompositor():
+# la seconda governa la catena di paste, e la sua lista (sway/hyprland/wayfire/river/dwl/
+# labwc/cage) non contiene niri — quindi la stessa var ripara hotkey e incollatura.
+#
+# Lo shim hyprctl serve alla seconda condizione, isHyprctlAvailable(), che esegue
+# `hyprctl version` e pretende exit 0: il binario vero sotto niri non puo' riuscirci
+# (misurato: exit 1 senza HIS, exit 4 con HIS fittizio — non c'e' socket a cui connettersi).
+# --- Sessione KDE: clipboard via ext-data-control invece di Electron ---
+#
+# Sotto KDE clipboard.js scrive la clipboard SOLO con xclip/xsel (presume XWayland, che il
+# launcher upstream forza e questo wrapper no): senza xclip ripiega su Electron, che su
+# Wayland senza focus e' inaffidabile -> il portale incolla il testo PRECEDENTE. Lo shim
+# traduce xclip in wl-copy/wl-paste. Dettagli nello shim stesso.
+if [[ "${XDG_CURRENT_DESKTOP:-}" == *KDE* ]]; then
+	RUN+=(PATH="$HOME/.local/libexec/openwhispr-xclip-shim:$PATH")
+fi
+
+if [ -n "${NIRI_SOCKET:-}" ]; then
+	RUN+=(
+		HYPRLAND_INSTANCE_SIGNATURE=niri-shim
+		PATH="$HOME/.local/libexec/openwhispr-hyprctl-shim:$PATH"
+	)
+fi
+
+# --- Selezione GPU per l'inferenza Whisper ---
+#
+# Di default whisper-server gira sulla iGPU AMD: ggml enumera entrambi i device Vulkan
+# (gli ICD nvidia e radeon sono entrambi in /usr/share/vulkan/icd.d/) e prende il numero 0,
+# che e' l'AMD perche' il layer implicito VK_LAYER_MESA_device_select mette in testa la GPU
+# che pilota il display — ed eDP-2 e' cablato alla iGPU. La 5060 e' pero' ~8x piu' veloce su
+# questo carico: misurato su 30 s di audio con ggml-medium, 1.45 s -> 0.18 s (mediana di 3).
+# Il divario e' nelle unita' matriciali, non nella banda: l'enumerazione riporta
+# `matrix cores: NV_coopmat2` + `fp16: 1`/`bf16: 1` sulla NVIDIA contro `KHR_coopmat` +
+# `fp16: dot2` sulla 780M, e l'encoder di Whisper e' dominato da GEMM dense.
+#
+# Si usa GGML_VK_VISIBLE_DEVICES e NON MESA_VK_DEVICE_SELECT: la prima la legge solo ggml,
+# la seconda passa dal layer Vulkan e riordinerebbe i device per OGNI client del processo,
+# parte Chromium di Electron inclusa (eredita questo stesso ambiente).
+#
+# L'indice e' rilevato a runtime, non cablato: `--help` fa enumerare i device e stampa
+# "N = NVIDIA ..." su stderr (misurato: ~70 ms, e il binario esce subito). Cablare "1"
+# fallirebbe in SILENZIO se l'ordine cambiasse — ggml non aborta, userebbe un altro device.
+# Stessa classe di errore del `mode` di niri e dell'auto-bind di Hyprland.
+#
+# Override: OPENWHISPR_GPU=amd salta il blocco (default di sistema, la 780M),
+# OPENWHISPR_GPU=nvidia e' il default implicito. Utile per un A/B o per ripiegare se un
+# aggiornamento del driver NVIDIA rompesse il percorso Vulkan.
+#
+# NB: la prima trascrizione dopo l'installazione costa ~15 s in piu' — e' la compilazione
+# delle pipeline SPIR-V, che il driver poi mette in cache in ~/.cache/nvidia (~124 MB).
+# Dagli avvii successivi il warm-up torna a ~0.2 s. Se ricompare, la cache e' stata svuotata.
+WHISPER_BIN=/opt/openwhispr/resources/bin/whisper-server-linux-x64
+#
+# TRAPPOLA: __EGL_VENDOR_LIBRARY_FILENAMES — una variabile EGL — nasconde il device
+# VULKAN della NVIDIA. Col pin a 50_mesa.json ggml enumera UN solo device (l'AMD) e
+# GGML_VK_VISIBLE_DEVICES=1 fallisce con "Invalid device index 1", ripiegando in
+# SILENZIO sul backend CPU (libggml-cpu-zen4, modello in RAM: VmRSS ~1.85 GB e nessun
+# drm-engine-compute). Il pin non arriva dalla shell ma dall'activation environment di
+# systemd --user (dbus-update-activation-environment in hyprland.lua), quindi lo eredita
+# solo l'app lanciata dal launcher — non il wrapper avviato da un terminale. Ecco perche'
+# il rilevamento dell'indice DEVE girare con lo stesso `env -u` del server, altrimenti i
+# due ambienti divergono e l'indice calcolato non esiste a runtime.
+# Stesso `env -u` gia' usato da distrobox/.local/bin/matlab per l'offload EGL.
+
+if [ "${OPENWHISPR_GPU:-nvidia}" != "amd" ] && [ -x "$WHISPER_BIN" ]; then
+	vk_list=$(env -u __EGL_VENDOR_LIBRARY_FILENAMES "$WHISPER_BIN" --help 2>&1)
+	vk_index=$(sed -n 's/^ggml_vulkan: \([0-9]\+\) = NVIDIA .*/\1/p' <<<"$vk_list" | head -1)
+	vk_amd=$(sed -n 's/^ggml_vulkan: \([0-9]\+\) = AMD .*/\1/p' <<<"$vk_list" | head -1)
+	if [ -n "$vk_index" ]; then
+		# Whisper sulla NVIDIA, LLM di pulizia sulla iGPU AMD.
+		#
+		# Con il MUX in modalita' dGPU l'intero desktop renderizza sulla 5060 (kwin,
+		# plasmashell, Brave ~1.6 GB): restano ~3 GiB liberi, Whisper ne prende 1.9 e
+		# llama-server (Qwen 4B, ctx 16384) fallisce l'allocazione della KV cache con
+		# ErrorOutOfDeviceMemory. Il contesto resta NULL e load_model lo dereferenzia
+		# comunque -> SIGSEGV in llama_context::n_ctx() (coredump + notifica DrKonqi),
+		# poi l'app ripiega sul backend CPU. Nemmeno LLAMA_ARG_NO_KV_OFFLOAD basta: a
+		# quel punto fallisce il compute buffer (126 MB). Misurato.
+		#
+		# Il routing per-server passa da due variabili lette da processi DIVERSI:
+		#  - GGML_VK_VISIBLE_DEVICES="nv,amd": la NVIDIA per prima, e whisper usa
+		#    gpu_device = 0 -> "using Vulkan0 backend" = NVIDIA (verificato, 1857 MiB);
+		#  - LLAMA_ARG_DEVICE=Vulkan1: equivalente env di --device, che l'app non passa
+		#    (llamaServer.js costruisce gli argv senza --device), quindi vince; whisper-server
+		#    ignora le LLAMA_ARG_*. Verificato: llama tiene 3 MiB sulla NVIDIA (solo il
+		#    contesto di enumerazione), pesi e KV sulla 780M via GTT; 40 token in 0.87 s.
+		# Gli indici si riferiscono alla lista FILTRATA, quindi Vulkan1 e' sempre l'AMD.
+		# Override: OPENWHISPR_LLM_GPU=nvidia rimette anche l'LLM sulla 5060.
+		if [ -n "$vk_amd" ] && [ "${OPENWHISPR_LLM_GPU:-amd}" = "amd" ]; then
+			RUN+=(GGML_VK_VISIBLE_DEVICES="$vk_index,$vk_amd" LLAMA_ARG_DEVICE=Vulkan1)
+		else
+			RUN+=(GGML_VK_VISIBLE_DEVICES="$vk_index")
+		fi
+
+		# Cache shader dedicata, altrimenti la PRIMA dettatura di ogni sessione costa
+		# ~15 s. Non e' il caricamento del modello (0.6 s) ma la compilazione delle
+		# pipeline SPIR-V->SASS. Il driver la mette in cache, solo che ~/.cache/nvidia
+		# e' CONDIVISA da tutti i client NVIDIA (Brave in testa) sotto un limite di
+		# default di 128 MiB: misurata a 122.8 MiB, gia' satura, quindi l'LRU sfrattava
+		# le pipeline di whisper fra un avvio e l'altro e il warm-up si ripresentava
+		# ogni volta. Isolandola il problema sparisce e lo spazio richiesto e' irrisorio:
+		# 944 KiB, contro 1 GiB di tetto qui concesso. Misurato, due avvii consecutivi
+		# di processi distinti: 15.18 s -> 0.19 s.
+		RUN+=(
+			__GL_SHADER_DISK_CACHE=1
+			__GL_SHADER_DISK_CACHE_PATH="$HOME/.cache/openwhispr-nvidia-shaders"
+			__GL_SHADER_DISK_CACHE_SIZE=1073741824
+		)
+	else
+		echo "openwhispr: nessun device Vulkan NVIDIA enumerato, resto sulla iGPU" >&2
+	fi
+fi
+
+# --- Apertura della Control Panel ---
+#
+# Al primo avvio l'app crea solo l'overlay Voice Recorder (96x96 px, floating): l'unico
+# createControlPanelWindow() fuori dall'onboarding sta dentro app.on("second-instance"),
+# quindi la finestra vera compare solo a un SECONDO lancio. Sotto niri non c'e' nemmeno un
+# tray host (quickshell non espone StatusNotifier) da cui riaprirla: senza questo blocco,
+# lanciare OpenWhispr dal launcher sembra non fare niente.
+# Il test di "istanza viva" e' il PID dentro SingletonLock — la stessa logica del process
+# singleton di Chromium. Le due alternative ovvie sono entrambe sbagliate, misurato:
+#   - `pgrep -x open-whispr-app`: alla chiusura restano zygote orfani (--type=zygote), che
+#     fingono un'app viva e fanno saltare il secondo lancio;
+#   - `[ -e SingletonSocket ]`: dopo un SIGKILL la dir /tmp/scoped_dir*/ non viene ripulita,
+#     quindi il symlink resta risolvibile e mente allo stesso modo.
+# Il lock invece punta a "<hostname>-<pid>", e il PID si verifica contro /proc.
+PROFILE="${XDG_CONFIG_HOME:-$HOME/.config}/open-whispr"
+
+instance_alive() {
+	local target pid
+	target=$(readlink "$PROFILE/SingletonLock" 2>/dev/null) || return 1
+	pid=${target##*-}
+	case "$pid" in
+	'' | *[!0-9]*) return 1 ;;
+	esac
+	[ "$(cat "/proc/$pid/comm" 2>/dev/null)" = "open-whispr-app" ]
+}
+
+if instance_alive; then
+	# Istanza gia' viva: questo lancio e' proprio il "second-instance" che apre il pannello.
+	exec "${RUN[@]}" "$APP" "${APP_FLAGS[@]}" "$@"
+fi
+
+# Avvio a freddo: stacca l'app, attendi che prenda il singleton lock, poi rilanciati una
+# volta per far aprire la Control Panel.
+setsid "${RUN[@]}" "$APP" "${APP_FLAGS[@]}" "$@" >/dev/null 2>&1 </dev/null &
+
+for _ in $(seq 1 80); do
+	instance_alive && break
+	sleep 0.25
+done
+
+# Senza la guardia, se l'avvio a freddo fosse fallito questo exec diventerebbe lui stesso
+# l'istanza primaria e resterebbe in foreground per sempre.
+if instance_alive; then
+	exec "${RUN[@]}" "$APP" "${APP_FLAGS[@]}" "$@"
+fi
+
+echo "openwhispr: l'istanza non ha preso il singleton lock entro 20 s" >&2
+exit 1

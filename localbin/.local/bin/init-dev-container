@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+mkdir -p .devcontainer
+cp ~/.config/devcontainer-templates/lazyvim/Dockerfile .devcontainer/
+cp ~/.config/devcontainer-templates/lazyvim/devcontainer.json .devcontainer/
+echo "LazyVim Dev Container initialized in .devcontainer/"

@@ -1,0 +1,32 @@
+#!/bin/bash
+# Shim hyprctl per OpenWhispr sotto niri — machine-local, NON stowato.
+#
+# Perche' esiste:
+#   OpenWhispr registra il servizio D-Bus com.openwhispr.App (l'unico canale con cui
+#   un bind esterno puo' fare Toggle della dettatura) solo dentro
+#   HotkeyManager.initializeHyprlandShortcuts(), e quel ramo richiede DUE condizioni:
+#     1. HyprlandShortcutManager.isHyprland()      -> HYPRLAND_INSTANCE_SIGNATURE o
+#                                                     "hyprland" in XDG_CURRENT_DESKTOP
+#     2. HyprlandShortcutManager.isHyprctlAvailable() -> execFileSync("hyprctl", ["version"])
+#                                                        deve uscire 0
+#   Non esiste un ramo wlroots generico: fuori dall'if la funzione fa return false, quindi
+#   sotto niri initDBusService() non viene MAI chiamato e il bind Ctrl+Mod+D e' un no-op.
+#
+#   La (1) si soddisfa con una env var. La (2) no: il vero /usr/sbin/hyprctl si connette
+#   a $XDG_RUNTIME_DIR/hypr/$HIS/.socket.sock, che sotto niri non esiste — misurato,
+#   exit 1 senza HIS e exit 4 con HIS fittizio. Da qui questo shim.
+#
+# Contratto: exit 0 SOLO per "version". Tutto il resto esce non-zero, cosi' le successive
+# `hyprctl keyword bind` dell'app falliscono invece di fingere successo — esattamente come
+# gia' falliscono sotto Hyprland reale col parser Lua (vedi CLAUDE.md), dove il D-Bus
+# funziona lo stesso.
+case "$1" in
+  version)
+    echo "hyprctl shim (niri session) — solo per il probe di OpenWhispr"
+    exit 0
+    ;;
+  *)
+    echo "hyprctl shim: '$*' non supportato sotto niri" >&2
+    exit 1
+    ;;
+esac

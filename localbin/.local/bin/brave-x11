@@ -1,0 +1,41 @@
+#!/usr/bin/env bash
+# brave-x11 — Brave forzato su Xwayland, come mitigazione del conflitto
+# tavoletta grafica <-> mouse sotto KDE Plasma / kwin_wayland.
+#
+# PERCHE':
+#   Su Wayland penna e mouse viaggiano su due protocolli distinti
+#   (zwp_tablet_tool_v2 e wl_pointer). L'ozone/Wayland di Chromium tiene il focus
+#   del tablet tool separato da quello del puntatore, e alla proximity_out della
+#   penna il focus del wl_pointer non viene ripristinato: i wl_pointer.button
+#   arrivano ma vengono scartati perche' la finestra bersaglio e' nulla
+#   (ui/ozone/platform/wayland/host/wayland_event_source.cc, OnPointerButtonEvent
+#   ritorna presto se target == nullptr). Il cursore continua a muoversi, i click
+#   spariscono, e si riprende solo al successivo wl_pointer.enter.
+#   Sotto Xwayland il tablet passa per XInput2 e il problema non si presenta.
+#   Riscontri a monte: bugs.kde.org 523647 (RESOLVED UPSTREAM),
+#   forum.obsidian.md/t/110296.
+#
+# COSTO: sotto Xwayland la finestra e' scalata da kwinrc [Xwayland] Scale=1.5,
+#   quindi si perde lo scaling frazionario per-monitor del Wayland nativo.
+#   Per questo NON e' il default: brave-flags.conf resta su --ozone-platform=wayland.
+#
+# VINCOLO NON OVVIO: il lock di singleton del profilo e' per-profilo, non
+#   per-piattaforma. Se una istanza Wayland e' viva, questo avvio si limita ad
+#   attaccarsi a quella e apre una finestra Wayland — la mitigazione sarebbe
+#   silenziosamente inefficace. Va quindi chiusa prima ogni istanza di Brave.
+#
+# Passa da /usr/bin/brave (lo script bash) e non da /opt/brave-bin/brave, cosi'
+# eredita brave-flags.conf; --ozone-platform in coda vince sul valore del file.
+set -euo pipefail
+
+if pgrep -x brave >/dev/null; then
+  cat >&2 <<'MSG'
+brave-x11: una istanza di Brave e' gia' in esecuzione.
+Il lock di singleton e' per-profilo: questo avvio si attaccherebbe a quella
+istanza aprendo una finestra Wayland, senza alcun effetto sul problema tavoletta.
+Chiudi completamente Brave (anche le finestre nascoste: `pkill -x brave`), poi riprova.
+MSG
+  exit 1
+fi
+
+exec ~/.local/bin/browser-amd-env /usr/bin/brave --ozone-platform=x11 "$@"

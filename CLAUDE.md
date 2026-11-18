@@ -29,7 +29,8 @@ The repo can rebuild a bare Arch/CachyOS install into the full desktop. Two halv
 
 - **Capture** — `scripts/capture-system.sh` regenerates `pkglist/pacman-explicit.txt`
   (`pacman -Qqen`) and `pkglist/aur-explicit.txt` (`pacman -Qqem`). Run it before a commit
-  to version the current machine's explicit packages. `pkglist/frameworks.txt` (git-cloned
+  to version the current machine's explicit packages. It **re-applies the ghostty derogation by
+  itself** (drops the `ghostty*-git` trio from the AUR list, keeps `ghostty` in the pacman one). `pkglist/frameworks.txt` (git-cloned
   zsh plugins + tpm, `dest|url` format) and `pkglist/laptop-only.txt` are hand-maintained
   (capture only regenerates the two main manifests, so these survive). The snapshot is 1:1,
   so it carries source-machine packages (e.g. `linux-g14`, `asusctl`); `laptop-only.txt`
@@ -37,7 +38,7 @@ The repo can rebuild a bare Arch/CachyOS install into the full desktop. Two halv
   (`hostnamectl`, override `--laptop`/`--desktop`).
 - **Replay** — `./bootstrap.sh` orchestrates `scripts/bootstrap.d/[0-9]*.sh` modules, each
   defining a `mod_*` function, sourced and called in a fixed order (00-preflight,
-  10-cachyos, 20-aur-helper, 30-packages, **40-stow before 45-shell before 50-frameworks**
+  10-cachyos, 20-aur-helper, 30-packages, 35-system, **40-stow before 45-shell before 50-frameworks**
   so oh-my-zsh/tpm/lazy.nvim find the stowed configs and `chsh` to fish happens after the
   fish config is linked, 70-theme). `45-shell.sh` (`mod_shell`) sets fish as the login
   shell (`chsh`, idempotent, behind `confirm`). `scripts/bootstrap.d/lib.sh`
@@ -46,6 +47,18 @@ The repo can rebuild a bare Arch/CachyOS install into the full desktop. Two halv
   `--laptop`/`--desktop`, `--dry-run`,
   `--yes`. Package install is fault-tolerant: batch first, then per-package fallback so one
   missing package doesn't abort the whole transaction.
+
+- **`system/` is a mirror of `/`, not a Stow package** (root-owned destinations): `35-system.sh`
+  (`mod_system`) copies it with `install` (only if different, backup `*.bak-bootstrap`), enables the
+  system units, **masks `swaync.service`** (symlink to `/dev/null`, done *before* stow so it lands in a
+  real `~/.config/systemd/user`), enables `ssh-agent.socket`, and adds the user to the needed groups.
+  Laptop-only files/units (MUX, NVIDIA Max-Q, mkinitcpio without NVIDIA) are gated on `INCLUDE_LAPTOP`.
+  GRUB cmdline and the `hyprpm` HyprGlass plugin stay manual — see `system/README.md`.
+  `localbin/` **is** a Stow package for the machine-local wrappers (`openwhispr`, `browser-amd-env`,
+  `brave-x11`, `init-dev-container`, the `hyprctl` shim). On this machine the live files are real, so a
+  `stow localbin` conflicts until `mod_stow`'s backup-and-link step moves them aside.
+  NB: `99-uinput.rules` now **does** grant `/dev/uinput` to group `input` (for OpenWhispr's
+  `linux-fast-paste`), which contradicts the older "deliberately not done" note further down.
 
 Conventions for these scripts: `set -euo pipefail`, Italian comments, every destructive or
 outward step behind `run`/`confirm` so `--dry-run` is side-effect-free. Modules are

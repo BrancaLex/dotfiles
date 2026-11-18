@@ -73,6 +73,7 @@ mod_preflight
 [[ $DO_CACHYOS == 1 ]] && mod_cachyos
 mod_aur_helper
 mod_packages
+mod_system
 mod_stow
 mod_shell
 mod_frameworks

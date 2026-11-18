@@ -1,0 +1,3 @@
+# Auto-switch power-profiles-daemon profile on AC plug/unplug (no GNOME daemon on Hyprland)
+SUBSYSTEM=="power_supply", ATTR{online}=="1", RUN+="/usr/bin/powerprofilesctl set performance"
+SUBSYSTEM=="power_supply", ATTR{online}=="0", RUN+="/usr/bin/powerprofilesctl set balanced"

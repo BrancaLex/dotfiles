@@ -1,0 +1,57 @@
+#!/usr/bin/env bash
+# browser-amd-env — coherent single-GPU (AMD 780M iGPU) launch environment for
+# Chromium/Brave on this hybrid AMD iGPU + NVIDIA RTX 5060 Hyprland system.
+#
+# ROOT CAUSE (historical — now fixed at the source, see below):
+#   The global session env split the browser GPU pipeline across vendors:
+#     - hyprland.conf : GBM_BACKEND=nvidia-drm, __GLX_VENDOR_LIBRARY_NAME=nvidia
+#                       -> GL render + buffer present forced onto NVIDIA dGPU
+#     - ~/.zshrc      : LIBVA_DRIVER_NAME=radeonsi (+ VDPAU/MESA)
+#                       -> VA-API hardware video decode on AMD iGPU
+#   When YouTube starts HW decode (VP9/AV1), the AMD-allocated VA dma-buf must be
+#   imported into the NVIDIA GBM/GL context. That cross-vendor zero-copy import
+#   stalls/crashes the GPU process -> tab/browser FREEZE.
+#
+# STATUS: the session-wide GPU split was FIXED AT THE SOURCE — the NVIDIA env vars
+#   were removed from hyprland.lua (the active config) and hyprland.conf (rollback).
+#   The whole desktop, not just the browser, now defaults to the AMD iGPU; the dGPU
+#   is used only on explicit offload. That fix also removed a per-app startup cost of
+#   +513 ms (VA-API probe) and +112 ms (GLX init) measured across the session.
+#   This wrapper is therefore no longer load-bearing: the `-u` unsets are now no-ops
+#   and radeonsi VA-API is the session default. It is kept as a safety belt (it still
+#   pins DRI_PRIME/MESA explicitly) and to guard against a regression in the session
+#   env. Removing it from the .desktop files would also be safe.
+#
+# FIX: pin the WHOLE browser to the AMD iGPU so decode and render are coherent.
+#   - DRI_PRIME selects the AMD render node (renderD129, pci 65:00.0)
+#   - unset the NVIDIA GBM/GLX/PRIME vars inherited from the session
+#   - keep radeonsi VA-API so HW decode stays on the same GPU as render
+#   NVIDIA dGPU remains available for explicit offload via `prime-run`.
+#
+# Usage: browser-amd-env /usr/bin/chromium %U
+#
+# MUX IN MODALITA' dGPU: tutto quanto sopra vale solo con il pannello sull'iGPU. Se il
+# MUX ha cablato il pannello sulla RTX 5060, pinnare il browser sull'AMD lo farebbe
+# renderizzare su una GPU senza output, con ogni frame copiato via PCIe verso la dGPU.
+# In quel caso si resta sulla GPU di scanout e si usa VA-API nvidia.
+gpu_profile="$HOME/.config/hypr/scripts/gpu-profile.sh"
+if [ -x "$gpu_profile" ] && "$gpu_profile" env | grep -qx 'GPU_PROFILE=dgpu'; then
+  exec env \
+    -u DRI_PRIME \
+    -u MESA_LOADER_DRIVER_OVERRIDE \
+    -u __EGL_VENDOR_LIBRARY_FILENAMES \
+    LIBVA_DRIVER_NAME=nvidia \
+    VDPAU_DRIVER=nvidia \
+    "$@"
+fi
+
+exec env \
+  -u GBM_BACKEND \
+  -u __GLX_VENDOR_LIBRARY_NAME \
+  -u __NV_PRIME_RENDER_OFFLOAD \
+  -u __VK_LAYER_NV_optimus \
+  DRI_PRIME=pci-0000_65_00_0 \
+  LIBVA_DRIVER_NAME=radeonsi \
+  VDPAU_DRIVER=radeonsi \
+  MESA_LOADER_DRIVER_OVERRIDE=radeonsi \
+  "$@"

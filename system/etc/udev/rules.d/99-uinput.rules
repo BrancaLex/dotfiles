@@ -1,0 +1,8 @@
+# Rende /dev/uinput scrivibile dal gruppo "input".
+# Serve a OpenWhispr: il suo binario linux-fast-paste --uinput inietta la
+# combinazione di incolla a livello kernel, cosi' arriva alla finestra
+# realmente in focus (wtype, sul protocollo virtual-keyboard, la consegnava
+# alla superficie sbagliata pur uscendo con successo).
+# static_node serve perche' il modulo uinput puo' essere caricato on-demand:
+# senza, i permessi non vengono applicati al nodo creato dal modulo.
+KERNEL=="uinput", GROUP="input", MODE="0660", OPTIONS+="static_node=uinput"

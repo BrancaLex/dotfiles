@@ -1,7 +1,12 @@
+# Tenuto a mano da capture-system.sh: sulla macchina è installato ghostty-git (AUR),
+# che soddisfa provides=ghostty e farebbe sparire la riga da `pacman -Qqen`.
+# Senza questa riga un bootstrap lascerebbe la macchina senza terminale.
+# Vedi aur/ghostty-git/README.md.
 7zip
 acpi_call-dkms
 amd-ucode
 ananicy-cpp
+arm-none-eabi-gdb
 asusctl
 aurorae
 awww
@@ -21,6 +26,7 @@ brightnessctl
 btop
 cachyos-keyring
 cachyos-mirrorlist
+cachyos-settings
 cachyos-v3-mirrorlist
 cachyos-v4-mirrorlist
 cava
@@ -43,21 +49,18 @@ earlyoom
 efibootmgr
 eza
 fastfetch
+filelight
 firefox
 fish
 flatpak-kcm
 fzf
-# Tenuto a mano: sulla macchina e' installato ghostty-git (AUR), che soddisfa
-# `provides=ghostty` e fa sparire questa riga da `pacman -Qqen`. Senza, una
-# macchina appena provisionata resterebbe senza terminale -- vedi
-# aur/ghostty-git/README.md. Da riapplicare dopo ogni capture-system.sh.
-ghostty
 git
 gnome-keyring
 gnome-themes-extra
 go
 grim
 grub
+gst-libav
 hypridle
 hyprland
 hyprlang
@@ -66,13 +69,13 @@ hyprpaper
 hyprpm
 jq
 kactivitymanagerd
+kcalc
 kde-cli-tools
-kde-gtk-config
 kdecoration
+kde-gtk-config
 kdenlive
 kdeplasma-addons
 keyd
-kgamma
 kglobalacceld
 kinfocenter
 kitty
@@ -80,6 +83,7 @@ kmenuedit
 knighttime
 kpipewire
 krdp
+krita
 kscreen
 kscreenlocker
 ksshaskpass
@@ -87,13 +91,13 @@ ksystemstats
 kwallet-pam
 kwayland
 kwin
-kwin-x11
 kwrited
 layer-shell-qt
 lazygit
 libkscreen
 libksysguard
 libplasma
+libreoffice-fresh
 libva-nvidia-driver
 libva-utils
 linux-cachyos
@@ -108,7 +112,6 @@ milou
 mpv
 mtools
 nautilus
-neofetch
 neovim
 netctl
 networkmanager
@@ -132,6 +135,7 @@ nwg-look
 obs-studio
 ocean-sound-theme
 okular
+openocd
 openssh
 os-prober
 otf-commit-mono-nerd
@@ -147,6 +151,7 @@ pipewire
 pipewire-alsa
 pipewire-jack
 pipewire-pulse
+plasma5support
 plasma-activities
 plasma-activities-stats
 plasma-bigscreen
@@ -166,12 +171,11 @@ plasma-vault
 plasma-welcome
 plasma-workspace
 plasma-workspace-wallpapers
-plasma5support
 plymouth-kcm
 podman
 polkit-kde-agent
-power-profiles-daemon
 powerdevil
+power-profiles-daemon
 print-manager
 python-pip
 python-pipx
@@ -183,21 +187,25 @@ qmk
 qqc2-breeze-style
 qt5-wayland
 quickshell
+remmina
 ripgrep
 rog-control-center
 rsync
 rust
 schedtool
 scrcpy
+scx-scheds
+scx-tools
 sddm-kcm
 slurp
 solaar
 spectacle
+stlink
 stow
-supergfxctl
 swayimg
 swaync
 systemsettings
+tailscale
 tcpdump
 terminus-font
 texlive-bibtexextra
@@ -219,9 +227,7 @@ union
 unixodbc
 unzip
 usbutils
-vesktop
 vulkan-radeon
-wacomtablet
 walker
 waybar
 webkit2gtk-4.1
@@ -244,7 +250,9 @@ ydotool
 yt-dlp
 zathura
 zathura-pdf-mupdf
+zen-browser-bin
 zip
 zoxide
 zram-generator
 zsh
+ghostty
