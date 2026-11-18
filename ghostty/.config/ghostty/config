@@ -4,6 +4,31 @@ font-size = 16
 
 theme = dark:Atom One Dark,light:Catppuccin Latte
 
+# Sfondo traslucido: HyprGlass disegna il vetro SOTTO la superficie della
+# finestra, quindi con lo sfondo opaco l'effetto resta completamente occluso.
+# Solo lo sfondo e' traslucido, i glifi restano pieni (a differenza della
+# window rule `opacity` di Hyprland, che attenuerebbe anche il testo).
+# NB: con gtk-single-instance + quit-after-last-window-closed = false il
+# processo sopravvive a zero finestre e non rilegge questo file: serve
+# `pkill ghostty` per applicare una modifica qui.
+background-opacity = 0.60
+
+# Blur del background sotto KDE Plasma. Ghostty non disegna nulla: dichiara la
+# regione da sfocare al compositore via il protocollo Wayland
+# `ext-background-effect-v1`. KWin ha UN SOLO raggio globale (Effetti Desktop >
+# Blur), quindi qui vale solo true/false: un valore numerico verrebbe ignorato.
+# RICHIEDE ghostty > 1.3.1 (pacchetto AUR `ghostty-git`): la 1.3.1 dei repo parla
+# ancora solo il vecchio `org_kde_kwin_blur`, che KWin 6.7 ha rimosso dalla
+# variante Wayland -- intersezione vuota, blur saltato SENZA alcun log.
+# Tutti e tre i compositori del repo espongono il protocollo (KWin 6.7.4,
+# niri 26.04, Hyprland 0.56.2 -- verificato con `strings` sui binari), quindi
+# l'opzione e' portabile. Su Hyprland resta pero' senza effetto per una ragione
+# indipendente: `decoration:blur:enabled = false` in hyprland.lua, scelta
+# deliberata. Su niri il blur arriva anche per un'altra via, la window-rule
+# `background-effect` in config.kdl, tenuta come fallback per un rollback al
+# pacchetto dei repo.
+background-blur = true
+
 gtk-titlebar = true
 
 # Latenza di apertura finestra: ~400 ms -> ~90 ms (misurato con hyprctl, fino a
@@ -17,3 +42,8 @@ gtk-single-instance = true
 # finestra termina il processo, e il lancio dopo ripaga i 400 ms di cold start.
 # Con `false` il processo resta residente a finestre zero e la latenza e' costante.
 quit-after-last-window-closed = false
+
+# Shader del cursore: scia "warp" (sahaj-b/ghostty-cursor-shaders, ghostty/cursor_warp.glsl).
+# Il file e' tracciato in shaders/ e linkato da stow. Il path deve esistere:
+# un custom-shader mancante fa fallire il parsing della config.
+custom-shader = ~/.config/ghostty/shaders/cursor_warp.glsl

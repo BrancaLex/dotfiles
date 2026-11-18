@@ -1,0 +1,128 @@
+# Generato da wal tramite template colors-yazi.toml.
+# NON modificare direttamente: viene sovrascritto da apply_theme.sh ad ogni cambio tema.
+# Brace delle inline-table TOML escapate come {{ }} (pywal usa str.format).
+
+# [app]: nessun overall.bg -> il terminale resta trasparente (eredita background_opacity di kitty)
+
+[mgr]
+cwd             = {{ fg = "{color4}", bold = true }}
+hovered         = {{ reversed = true }}
+preview_hovered = {{ underline = true }}
+find_keyword    = {{ fg = "{color3}", bold = true, italic = true }}
+find_position   = {{ fg = "{color5}", dim = true }}
+symlink_target  = {{ fg = "{color6}", italic = true }}
+
+tab_active  = {{ fg = "{background}", bg = "{color4}", bold = true }}
+tab_inactive = {{ fg = "{color8}" }}
+
+border_style = {{ fg = "{color8}" }}
+
+marker_selected = {{ fg = "{background}", bg = "{color4}" }}
+marker_copied   = {{ fg = "{background}", bg = "{color2}" }}
+marker_cut      = {{ fg = "{background}", bg = "{color1}" }}
+
+count_selected = {{ fg = "{background}", bg = "{color4}" }}
+count_copied   = {{ fg = "{background}", bg = "{color2}" }}
+count_cut      = {{ fg = "{background}", bg = "{color1}" }}
+
+[mode]
+normal_main = {{ fg = "{background}", bg = "{color4}", bold = true }}
+normal_alt  = {{ fg = "{color4}" }}
+
+select_main = {{ fg = "{background}", bg = "{color2}", bold = true }}
+select_alt  = {{ fg = "{color2}" }}
+
+unset_main = {{ fg = "{background}", bg = "{color1}", bold = true }}
+unset_alt  = {{ fg = "{color1}" }}
+
+[status]
+sep_left  = {{ open = "", close = "" }}
+sep_right = {{ open = "", close = "" }}
+
+perm_type  = {{ fg = "{color4}" }}
+perm_read  = {{ fg = "{color3}" }}
+perm_write = {{ fg = "{color1}" }}
+perm_exec  = {{ fg = "{color2}" }}
+perm_sep   = {{ fg = "{color8}", dim = true }}
+
+progress_label  = {{ fg = "{foreground}", bold = true }}
+progress_normal = {{ fg = "{color4}" }}
+progress_error  = {{ fg = "{color1}" }}
+
+[pick]
+border   = {{ fg = "{color8}" }}
+active   = {{ fg = "{color4}", bold = true }}
+inactive = {{ fg = "{foreground}" }}
+
+[input]
+border   = {{ fg = "{color8}" }}
+title    = {{ fg = "{color4}" }}
+value    = {{ fg = "{foreground}" }}
+selected = {{ reversed = true }}
+
+[cmp]
+border       = {{ fg = "{color8}" }}
+active       = {{ fg = "{color4}", bold = true }}
+inactive     = {{ fg = "{foreground}" }}
+icon_file    = ""
+icon_folder  = ""
+icon_command = ""
+
+[tasks]
+border = {{ fg = "{color8}" }}
+title  = {{ fg = "{color4}" }}
+
+[which]
+cols            = 3
+mask            = {{ bg = "{color0}" }}
+cand            = {{ fg = "{color4}" }}
+rest            = {{ fg = "{color8}" }}
+desc            = {{ fg = "{foreground}" }}
+separator       = "  "
+separator_style = {{ fg = "{color8}", dim = true }}
+
+[confirm]
+border  = {{ fg = "{color8}" }}
+title   = {{ fg = "{color4}" }}
+body    = {{ fg = "{foreground}" }}
+list    = {{ fg = "{foreground}" }}
+btn_yes = {{ fg = "{background}", bg = "{color4}", bold = true }}
+btn_no  = {{ fg = "{foreground}" }}
+
+[spot]
+border   = {{ fg = "{color8}" }}
+title    = {{ fg = "{color4}" }}
+tbl_col  = {{ fg = "{color4}", bold = true }}
+tbl_cell = {{ fg = "{foreground}" }}
+
+[notify]
+title_info  = {{ fg = "{color4}" }}
+title_warn  = {{ fg = "{color3}" }}
+title_error = {{ fg = "{color1}" }}
+
+[filetype]
+rules = [
+    # Directory
+    {{ url = "*/", fg = "{color4}" }},
+    # Immagini
+    {{ mime = "image/*", fg = "{color3}" }},
+    # Video
+    {{ mime = "video/*", fg = "{color5}" }},
+    # Audio
+    {{ mime = "audio/*", fg = "{color5}" }},
+    # Archivi
+    {{ mime = "application/zip", fg = "{color1}" }},
+    {{ mime = "application/gzip", fg = "{color1}" }},
+    {{ mime = "application/x-tar", fg = "{color1}" }},
+    {{ mime = "application/x-bzip2", fg = "{color1}" }},
+    {{ mime = "application/x-xz", fg = "{color1}" }},
+    {{ mime = "application/x-zstd", fg = "{color1}" }},
+    {{ mime = "application/x-rar", fg = "{color1}" }},
+    {{ mime = "application/x-7z-compressed", fg = "{color1}" }},
+    # File vuoti
+    {{ mime = "inode/empty", fg = "cyan" }},
+    # Link orfani
+    {{ url = "*", is = "orphan", fg = "red" }},
+    # Eseguibili
+    {{ url = "*", is = "exec", fg = "{color2}" }},
+]

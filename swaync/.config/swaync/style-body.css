@@ -1,0 +1,239 @@
+/* swaync — corpo statico del tema (tracciato).
+ * I @define-color (cc_bg, noti_bg, widget_bg, accent, accent2, error_color, fg,
+ * fg_dim, border_col) NON sono qui: vengono prepesi da apply_theme.sh
+ * concatenando ~/.cache/wal/colors-swaync.css davanti a questo file ->
+ * ~/.config/swaync/style.css (generato, in .gitignore).
+ *
+ * Niente @import: swaync carica un SOLO style.css (il primo trovato tra
+ * ~/.config/swaync/ e /etc/xdg/swaync/) e non lo fonde col default -> questo
+ * foglio dev'essere completo. La concatenazione mette i colori nello stesso file.
+ *
+ * Control Center (@cc_bg) e notifiche floating (@noti_bg) sono OPACHI ({background},
+ * niente alpha): i layer swaync non hanno una regola di blur dedicata, quindi il blur
+ * globale di Hyprland faceva trasparire il wallpaper grezzo (aspetto torbido). */
+
+* {
+  font-family: "Hack Nerd Font", "Noto Sans", sans-serif;
+  font-size: 14px;
+}
+
+/* ---------- Notifiche floating (popup) ---------- */
+.floating-notifications.background .notification-row .notification-background {
+  margin: 8px 12px;
+}
+.notification-row .notification-background .notification {
+  background: @noti_bg;
+  border: 1px solid @border_col;
+  border-radius: 14px;
+  padding: 4px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
+}
+.notification-row .notification-background .notification.critical {
+  border: 1px solid @error_color;
+  box-shadow: 0 0 0 1px alpha(@error_color, 0.4), 0 4px 12px rgba(0, 0, 0, 0.25);
+}
+.notification-content {
+  padding: 8px;
+  color: @fg;
+}
+.notification-content .summary { color: @fg; font-weight: bold; }
+.notification-content .time    { color: @fg_dim; font-size: 12px; }
+.notification-content .body    { color: alpha(@fg, 0.85); }
+.notification-content .app-icon { color: @accent; }
+
+/* Azioni + risposte inline */
+.notification-action,
+.notification-default-action { border-radius: 10px; }
+.notification-action {
+  background: @widget_bg;
+  color: @fg;
+  border: 1px solid @border_col;
+  border-radius: 10px;
+  margin: 4px;
+  padding: 6px 10px;
+}
+.notification-action:hover { background: alpha(@accent, 0.25); }
+/* Hover sull'intera notifica: swaync di default la avvolge in un rettangolo grigio
+   scuro (--noti-bg-hover rgb(56,56,56)); override con una tinta accent pywal discreta.
+   Il secondo selettore replica la specificità della regola CC del tema default. */
+.notification-default-action:hover,
+.control-center .control-center-list .notification .notification-default-action:hover {
+  background: alpha(@accent, 0.15);
+}
+.inline-reply-entry {
+  background: @widget_bg;
+  color: @fg;
+  border: 1px solid @border_col;
+  border-radius: 8px;
+}
+.inline-reply-button {
+  background: alpha(@accent, 0.2);
+  color: @fg;
+  border-radius: 8px;
+  border: 1px solid @border_col;
+}
+.inline-reply-button:hover { background: alpha(@accent, 0.35); }
+
+/* Pulsante chiudi */
+.close-button {
+  background: transparent;
+  color: @fg_dim;
+  border-radius: 100%;
+  margin: 6px;
+  padding: 2px;
+}
+.close-button:hover { background: @error_color; color: @fg; }
+
+/* Gruppi di notifiche */
+.notification-group-headers { color: @fg_dim; font-weight: bold; }
+.notification-group-icon    { color: @accent; }
+
+/* ---------- Control Center ---------- */
+.control-center {
+  background: @cc_bg;
+  border: 1px solid @border_col;
+  border-radius: 18px;
+  box-shadow: 0 24px 48px rgba(0, 0, 0, 0.55);
+  padding: 12px;
+}
+.control-center .control-center-list { background: transparent; }
+.control-center .control-center-list-placeholder { color: @fg_dim; opacity: 0.6; }
+
+/* Notifiche dentro il CC */
+.control-center .notification-row .notification-background .notification {
+  background: @widget_bg;
+  border: 1px solid alpha(@fg, 0.06);
+  border-radius: 12px;
+  box-shadow: none;
+}
+
+/* Barra scorrimento discreta */
+scrollbar { background: transparent; }
+scrollbar slider {
+  background: alpha(@fg, 0.2);
+  border-radius: 10px;
+  min-width: 6px;
+}
+scrollbar slider:hover { background: alpha(@accent, 0.6); }
+
+/* ---------- Widget generici ---------- */
+.widget-title {
+  color: @fg;
+  font-size: 16px;
+  font-weight: bold;
+  margin: 4px 4px 10px 4px;
+}
+.widget-title > button {
+  background: @widget_bg;
+  color: @fg;
+  border: 1px solid @border_col;
+  border-radius: 10px;
+  padding: 4px 12px;
+  font-size: 13px;
+}
+.widget-title > button:hover { background: alpha(@accent, 0.25); }
+
+/* MPRIS (controlli media) — swaync 0.12.6 dipinge l'album art come background a
+ * tutto campo sfocato (.mpris-background) con scrim scuro (.mpris-overlay). Su
+ * pannello opaco l'effetto "immagine sfocata dietro il testo" stona: rendiamo il
+ * player una card SOLIDA (overlay opaco @cc_bg che copre l'album art), la copertina
+ * resta solo come thumbnail (.widget-mpris-album-art). */
+.widget-mpris {
+  background: transparent;
+  padding: 4px;
+  margin: 4px;
+}
+.widget-mpris .widget-mpris-player {
+  background: transparent;
+  box-shadow: none;
+  margin: 4px;
+}
+.widget-mpris .widget-mpris-player .mpris-background {
+  background: none;   /* niente album art a tutto campo */
+  filter: none;       /* niente blur */
+}
+.widget-mpris .widget-mpris-player .mpris-overlay {
+  background-color: @cc_bg;         /* opaco: nasconde l'album art di sfondo */
+  border: 1px solid @border_col;
+  border-radius: 14px;
+  padding: 12px;
+}
+.widget-mpris-album-art { border-radius: 12px; }
+.widget-mpris-title  { color: @fg; font-weight: bold; }
+.widget-mpris-subtitle { color: @fg_dim; }
+.widget-mpris button { color: @fg; }
+.widget-mpris button:hover { color: @accent; }
+
+/* Griglia toggle */
+.widget-buttons-grid {
+  background: transparent;
+  padding: 4px;
+  margin: 4px;
+}
+.widget-buttons-grid > flowbox > flowboxchild > button {
+  background: @widget_bg;
+  color: @fg;
+  border: 1px solid @border_col;
+  border-radius: 12px;
+  padding: 12px;
+  margin: 4px;
+  font-size: 18px;
+}
+.widget-buttons-grid > flowbox > flowboxchild > button:hover {
+  background: alpha(@accent, 0.2);
+}
+.widget-buttons-grid > flowbox > flowboxchild > button.toggle:checked {
+  background: alpha(@accent, 0.35);
+  border: 1px solid @accent;
+  color: @fg;
+}
+
+/* Slider volume / backlight */
+.widget-volume,
+.widget-backlight {
+  background: @widget_bg;
+  border: 1px solid alpha(@fg, 0.06);
+  border-radius: 14px;
+  padding: 8px 12px;
+  margin: 4px;
+  color: @fg;
+}
+.widget-volume trough,
+.widget-backlight trough,
+.widget-slider trough {
+  background: alpha(@fg, 0.15);
+  border-radius: 10px;
+  min-height: 8px;
+}
+.widget-volume highlight,
+.widget-backlight highlight,
+.widget-slider highlight {
+  background: @accent;
+  border-radius: 10px;
+}
+.widget-volume slider,
+.widget-backlight slider,
+.widget-slider slider {
+  background: @fg;
+  border-radius: 100%;
+  min-width: 14px;
+  min-height: 14px;
+}
+
+/* DND (se abilitato in widgets) */
+.widget-dnd { color: @fg; margin: 4px; }
+.widget-dnd > switch {
+  background: alpha(@fg, 0.2);
+  border-radius: 100px;
+}
+.widget-dnd > switch:checked { background: @accent; }
+
+/* Label / inhibitors (se abilitati) */
+.widget-label > label { color: @fg; }
+.widget-inhibitors { color: @fg; margin: 4px; }
+.widget-inhibitors > button {
+  background: @widget_bg;
+  color: @fg;
+  border: 1px solid @border_col;
+  border-radius: 10px;
+}

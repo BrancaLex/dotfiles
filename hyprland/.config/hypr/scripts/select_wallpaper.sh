@@ -3,16 +3,19 @@
 # Directory degli sfondi
 WALL_DIR="$HOME/Images"
 
-# Usiamo Walker in modalità dmenu per scegliere lo sfondo
-# Elenchiamo solo i file immagine (.jpg, .png, .webp)
-SELECTED=$(ls "$WALL_DIR" | grep -E "\.(jpg|jpeg|png|webp|gif|avif)$" | walker --dmenu)
-
-# Se non viene selezionato nulla (Esc), esce
-if [ -z "$SELECTED" ]; then
-    exit 0
+# Due ingressi:
+#  - senza argomenti (ALT+W): apre il launcher di quickshell in modalità sfondi
+#    ed esce subito. La scelta non torna qui sullo stdout come con walker
+#    --dmenu: un IPC qs non può restare in attesa, quindi è il launcher a
+#    rilanciare questo script con il percorso scelto.
+#  - con un percorso: applica quello sfondo.
+if [ -z "${1-}" ]; then
+    exec qs -c ale ipc call launcher wallpapers
 fi
 
-FULL_PATH="$WALL_DIR/$SELECTED"
+FULL_PATH="$1"
+WALL_DIR="$(dirname "$FULL_PATH")"
+SELECTED="$(basename "$FULL_PATH")"
 
 CACHE_DIR="$HOME/.cache/hyprpaper"
 mkdir -p "$CACHE_DIR"
@@ -60,4 +63,3 @@ if [[ -z "$NIRI_SOCKET" ]]; then
     sed -i "s|path = .*|path = $DISPLAY_PATH|" "$HOME/.config/hypr/hyprpaper.conf"
 fi
 
-notify-send "Sfondo aggiornato" "$SELECTED" -i "$DISPLAY_PATH"

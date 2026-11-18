@@ -1,0 +1,41 @@
+# Walker — configurazione provider.
+# Walker (frontend GTK4) interroga il backend "elephant"; ogni provider è un
+# plugin .so in /usr/lib/elephant/ fornito da un pacchetto AUR separato.
+# Per clipboard / files / todo servono: elephant-clipboard, elephant-files,
+# elephant-todo (o le varianti -bin). Dopo l'installazione: riavvia elephant.
+
+# Tema "pywal": eredita layout/XML dal tema default, sovrascrive solo lo style.css
+# (in themes/pywal/style.css). Lo style importa i colori pywal da ~/.cache/wal/.
+theme = "pywal"
+close_when_open = true   # ALT+tasto già aperto -> chiude
+single_click_activation = true
+
+[providers]
+# Provider interrogati con query normale (il launcher di default).
+default = ["desktopapplications", "calc", "websearch"]
+# Provider interrogati a query vuota (appena apri walker).
+empty = ["desktopapplications"]
+max_results = 50
+
+# Prefissi: digita il simbolo come PRIMO carattere per interrogare un solo
+# provider. Es: ":" + testo -> cronologia clipboard; "/" -> ricerca file;
+# "!" -> todo. Replico anche providerlist (";") per lo switcher.
+[[providers.prefixes]]
+prefix = ":"
+provider = "clipboard"
+
+[[providers.prefixes]]
+prefix = "/"
+provider = "files"
+
+[[providers.prefixes]]
+prefix = "!"
+provider = "todo"
+
+[[providers.prefixes]]
+prefix = ";"
+provider = "providerlist"
+
+# Clipboard: formato data relativo ("2m fa") invece che timestamp assoluto.
+[providers.clipboard]
+time_format = "relative"

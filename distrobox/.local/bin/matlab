@@ -1,0 +1,17 @@
+#!/usr/bin/env bash
+# Lancia MATLAB R2026b nel container distrobox forzando il rendering sulla dGPU NVIDIA
+# tramite PRIME offload (Wayland/X11 ibrido). Il compute CUDA (gpuArray) usa già la dGPU
+# indipendentemente da queste variabili — sono necessarie solo per il renderer OpenGL/GLX.
+#
+# `-u __EGL_VENDOR_LIBRARY_FILENAMES`: la sessione pinna EGL su Mesa/AMD (vedi hyprland.lua),
+# altrimenti i client Wayland finiscono sulla dGPU da soli. Qui l'offload è voluto, quindi
+# il pin va rimosso o un eventuale percorso EGL resterebbe bloccato sulla iGPU.
+# Uso:  matlab [argomenti MATLAB...]   (es. matlab -desktop, matlab -batch "...")
+set -euo pipefail
+
+exec distrobox enter matlab-r2026b -- env \
+  -u __EGL_VENDOR_LIBRARY_FILENAMES \
+  __NV_PRIME_RENDER_OFFLOAD=1 \
+  __GLX_VENDOR_LIBRARY_NAME=nvidia \
+  __VK_LAYER_NV_optimus=NVIDIA_only \
+  /home/ale/MATLAB/R2026b/bin/matlab "$@"

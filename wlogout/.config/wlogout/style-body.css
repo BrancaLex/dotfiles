@@ -1,0 +1,54 @@
+* {
+    background-image: none;
+    box-shadow: none;
+}
+
+window {
+    /* Sfondo sempre scuro: le icone sono PNG bianchi, su bg chiaro sparirebbero */
+    background-color: rgba(10, 10, 10, 0.85);
+}
+
+button {
+    color: #e6e6e6;
+    background-color: transparent;
+    border: 2px solid @accent_color;
+    border-radius: 16px;
+    margin: 8px;
+    min-width: 120px;
+    min-height: 120px;
+    background-repeat: no-repeat;
+    background-position: center;
+    background-size: 40px;
+}
+
+button:focus,
+button:active,
+button:hover {
+    background-color: @accent_color;
+    color: #0a0a0a;
+    outline-style: none;
+}
+
+#shutdown:hover {
+    background-color: @error_color;
+}
+
+#lock {
+    background-image: image(url("/usr/share/wlogout/icons/lock.png"), url("/usr/local/share/wlogout/icons/lock.png"));
+}
+
+#logout {
+    background-image: image(url("/usr/share/wlogout/icons/logout.png"), url("/usr/local/share/wlogout/icons/logout.png"));
+}
+
+#suspend {
+    background-image: image(url("/usr/share/wlogout/icons/suspend.png"), url("/usr/local/share/wlogout/icons/suspend.png"));
+}
+
+#shutdown {
+    background-image: image(url("/usr/share/wlogout/icons/shutdown.png"), url("/usr/local/share/wlogout/icons/shutdown.png"));
+}
+
+#reboot {
+    background-image: image(url("/usr/share/wlogout/icons/reboot.png"), url("/usr/local/share/wlogout/icons/reboot.png"));
+}

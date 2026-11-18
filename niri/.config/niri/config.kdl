@@ -69,18 +69,14 @@ input {
 // -----------------
 // ---- OUTPUTS ----
 // -----------------
-// Portato da monitors.lua. eDP-2 -> iGPU AMD 780M (primary DRM, il pannello e'
-// cablato li'); HDMI-A-1 -> dGPU RTX 5060.
+// Portato da monitors.lua. HDMI-A-1 -> dGPU RTX 5060 in ogni modalita' del MUX.
 //
-// ATTENZIONE: i nomi qui sono quelli riportati da aquamarine/Hyprland. Vanno
-// confermati al primo avvio con `niri msg outputs`: se il connettore ha un
-// nome diverso (p.es. eDP-1) questi nodi sono SILENZIOSAMENTE inerti e i
-// monitor finiscono in auto-layout.
-output "eDP-2" {
-    mode "2560x1600@165.000"
-    scale 1.3333334
-    position x=533 y=1914
-}
+// Il PANNELLO INTERNO non e' qui: il suo connettore dipende dal MUX (ibrido ->
+// eDP-2 sull'iGPU AMD; dGPU -> eDP-1 sulla RTX 5060), e un nodo `output` con il
+// nome sbagliato e' SILENZIOSAMENTE inerte. Il suo `output` e i workspace che vi si
+// aprono (1-5, magic) stanno nel frammento GENERATO al login da
+// hyprland/.config/hypr/scripts/gpu-profile.sh (gitignored).
+include optional=true "gpu-profile.kdl"
 
 // Acer XB273 GX (1080p 240 Hz). Modalita' ESPLICITA e non "preferred": la
 // modalita' raccomandata dall'EDID e' 1920x1080@60, mentre 1920x1080@239.964 e'
@@ -110,11 +106,7 @@ output "HDMI-A-1" {
 // Servono quindi workspace NOMINATI, che persistono anche da vuoti.
 // Nei bind si usa la STRINGA "1": in KDL "1" (nome) e 1 (indice) sono tipi
 // distinti e selezionano semantiche diverse.
-workspace "1"  { open-on-output "eDP-2"; }
-workspace "2"  { open-on-output "eDP-2"; }
-workspace "3"  { open-on-output "eDP-2"; }
-workspace "4"  { open-on-output "eDP-2"; }
-workspace "5"  { open-on-output "eDP-2"; }
+// I workspace 1-5 (pannello interno) sono in gpu-profile.kdl, vedi OUTPUTS.
 workspace "6"  { open-on-output "HDMI-A-1"; }
 workspace "7"  { open-on-output "HDMI-A-1"; }
 workspace "8"  { open-on-output "HDMI-A-1"; }
@@ -125,7 +117,7 @@ workspace "10" { open-on-output "HDMI-A-1"; }
 // piu' vicino a uno scratchpad: workspace dedicato, persistente, sempre
 // raggiungibile. DIFFERENZA: non e' un overlay -- ALT+S ci salta SOPRA invece
 // di sovrapporlo alla vista corrente.
-workspace "magic" { open-on-output "eDP-2"; }
+// Dichiarato in gpu-profile.kdl (si apre sul pannello interno), vedi OUTPUTS.
 
 // ----------------
 // ---- LAYOUT ----
@@ -140,7 +132,7 @@ layout {
     // colors-niri.kdl + uno step in apply_theme.sh + `niri msg action
     // load-config-file`. Fuori scope.
     focus-ring {
-        width 0
+        width 3
         active-gradient from="#33ccff" to="#00ff99" angle=45
         inactive-color "#595959"
     }
@@ -206,6 +198,12 @@ spawn-sh-at-startup "~/dotfiles/hyprland/.config/hypr/scripts/apply_theme.sh $(c
 spawn-at-startup "hypridle"
 spawn-at-startup "copyq" "--start-server"
 spawn-at-startup "wlsunset" "-l" "44.7" "-L" "10.6"
+// Solaar: riapplica il DPI del MX Master 3S (900) a ogni riconnessione
+// Bluetooth. Il sensore non ha profili onboard scrivibili, quindi senza
+// demone residente torna a 1000 allo spegnimento del mouse. Qui non c'e'
+// host StatusNotifier (quickshell non lo espone): gira senza tray icon,
+// si usa da CLI con `solaar config`.
+spawn-at-startup "solaar" "--window=hide"
 spawn-sh-at-startup "~/.config/swaync/scripts/screenshare-inhibit.sh"
 
 // Variabili di sessione nell'activation environment: swaync, i portal e le PWA
@@ -235,7 +233,10 @@ spawn-sh-at-startup "~/.config/swaync/scripts/screenshare-inhibit.sh"
 // Il pin era comunque ridondante: con Mesa recente un client Wayland segue da se'
 // il device del compositore (vedi CLAUDE.md, rimosso anche da hl.env senza
 // regressioni). Un offload EGL alla dGPU si fa per-comando, non qui.
-spawn-sh-at-startup "dbus-update-activation-environment --systemd WAYLAND_DISPLAY XDG_CURRENT_DESKTOP XDG_SESSION_TYPE XDG_SESSION_DESKTOP NIRI_SOCKET LIBVA_DRIVER_NAME=radeonsi VDPAU_DRIVER=radeonsi"
+//
+// LIBVA_DRIVER_NAME/VDPAU_DRIVER passati per NOME: il valore (radeonsi o nvidia,
+// secondo il MUX) arriva dalla fish di login via gpu-profile.sh.
+spawn-sh-at-startup "dbus-update-activation-environment --systemd WAYLAND_DISPLAY XDG_CURRENT_DESKTOP XDG_SESSION_TYPE XDG_SESSION_DESKTOP NIRI_SOCKET LIBVA_DRIVER_NAME VDPAU_DRIVER"
 
 // Preload di Brave headless: il primo avvio di sessione costa ~3166 ms, i
 // successivi ~140 ms perche' Brave sopravvive con zero finestre. DEVE passare
@@ -257,7 +258,8 @@ spawn-sh-at-startup "sleep 25; exec ~/.local/bin/browser-amd-env brave --no-star
 //
 // MAPPATURA (Hyprland -> niri), solo dove non e' 1:1:
 //   ALT+H / ALT+L       focus finestra   -> focus-column-left/right  (COLONNE)
-//   ALT+J / ALT+K       focus finestra   -> focus-window-down/up     (nella colonna)
+//   ALT+J / ALT+K       focus finestra   -> focus-window-or-monitor-down/up
+//                                          (nella colonna; dal bordo salta monitor)
 //   ALT+S               special:magic    -> workspace "magic" (non e' un overlay)
 //   ALT+SHIFT+P         pseudo (dwindle) -> toggle-column-tabbed-display
 //   ALT+SHIFT+J         togglesplit      -> consume-or-expel-window-right
@@ -289,14 +291,23 @@ binds {
     // consumo/espulsione di una finestra dalla colonna.
     Mod+Shift+P { toggle-column-tabbed-display; }
     Mod+Shift+J { consume-or-expel-window-right; }
+    // Toggle: la colonna occupa tutta la larghezza utile dell'output e torna
+    // poi alla larghezza precedente. NON e' il fullscreen -- gaps, bordi e
+    // layer-shell (barra) restano visibili, ed e' un'operazione di LAYOUT, non
+    // uno stato del client: nessun protocollo xdg-shell coinvolto.
+    Mod+F { maximize-column; }
 
     // ---- Focus (vim-like) ----
     // ATTENZIONE alla semantica: orizzontale = colonne, verticale = finestre
     // dentro la colonna corrente.
     Mod+H { focus-column-left; }
     Mod+L { focus-column-right; }
-    Mod+K { focus-window-up; }
-    Mod+J { focus-window-down; }
+    // Verticale IBRIDO: naviga tra le finestre della colonna e, quando si e'
+    // gia' sul bordo (prima/ultima finestra, o colonna con una sola finestra),
+    // il fuoco passa all'altro MONITOR invece di fermarsi. Un solo tasto per
+    // entrambe le semantiche, nessuna finestra impilata resa irraggiungibile.
+    Mod+K { focus-window-or-monitor-up; }
+    Mod+J { focus-window-or-monitor-down; }
 
     // ---- Workspace 1-10 (il tasto 0 e' il decimo, come in hyprland.lua) ----
     Mod+1 { focus-workspace "1"; }
@@ -354,9 +365,16 @@ binds {
 
     // ---- Clipboard e dettatura ----
     Ctrl+Mod+V { spawn "copyq" "toggle"; }
-    // OpenWhispr: il servizio D-Bus com.openwhispr.App e' indipendente dal
-    // compositore, quindi questo bind e' portabile tal quale. Solo modalita'
-    // toggle: l'interfaccia non espone press/release (niente hold-to-talk).
+    // OpenWhispr: il bind e' identico a quello di hyprland.lua, ma qui NON funziona
+    // gratis. L'app registra com.openwhispr.App solo dentro
+    // initializeHyprlandShortcuts(), gated su isHyprland() && isHyprctlAvailable(),
+    // e non esiste un ramo wlroots generico: sotto niri il nome non arriva mai sul
+    // bus e questo dbus-send fallisce in SILENZIO ("name is not activatable").
+    // A sbloccarlo e' il wrapper ~/.local/bin/openwhispr (machine-local, non stowato),
+    // che sotto niri esporta un HYPRLAND_INSTANCE_SIGNATURE fittizio e uno shim hyprctl.
+    // Se il bind smette di funzionare, verificare prima:
+    //   busctl --user list | grep -i openwhispr
+    // Solo modalita' toggle: l'interfaccia non espone press/release (niente hold-to-talk).
     Ctrl+Mod+D { spawn-sh "dbus-send --session --type=method_call --dest=com.openwhispr.App /com/openwhispr/App com.openwhispr.App.Toggle"; }
 
     // ---- Window switcher ----
@@ -443,9 +461,59 @@ window-rule {
     block-out-from "screen-capture"
 }
 
+window-rule {
+  geometry-corner-radius 12
+  clip-to-geometry true
+}
+
 // wallpaper-picker: float centrato al 60% dello schermo (da hyprland.lua:418).
 window-rule {
     match app-id=r#"^wallpaper-picker$"#
     open-floating true
     default-column-width { proportion 0.6; }
+}
+
+// Sezione TOP-LEVEL (non una window-rule, nonostante la posizione): tenuta qui
+// per leggerla insieme all'unica regola che la consuma. Default niri:
+//   passes 3   offset 3   noise 0.02   saturation 1.5
+// `offset` e' il moltiplicatore di spostamento dei tap del dual-Kawase: allarga
+// il raggio A COSTO GPU NULLO, quindi e' la prima leva da alzare. `passes` e' il
+// numero di down/up-sample e costa davvero -- rilevante qui perche' su HDMI-A-1
+// (cablato alla dGPU) il blur entra nel blit multi-GPU su PCIe.
+// Se comparissero banding o artefatti a scacchiera, alzare `noise` verso 0.04
+// prima di ridurre `offset`.
+blur {
+    passes 4
+    offset 5
+}
+
+// Blur del backdrop dietro il terminale (richiede niri >= 26.04). Da niri 26.04
+// le vie al blur sono DUE, e questa e' la seconda scelta:
+//   1. via client -- ghostty chiede il blur da se' col protocollo Wayland
+//      `ext-background-effect-v1` (`background-blur = true` nel suo config), e
+//      niri lo onora "with no extra niri configuration" (release notes 26.04).
+//      Richiede pero' ghostty > 1.3.1: la 1.3.1 dei repo parla solo il vecchio
+//      `org_kde_kwin_blur`. Serve il pacchetto AUR `ghostty-git`.
+//   2. via config -- questa window-rule, che le stesse release notes qualificano
+//      come fallback "for apps that don't support ext-background-effect yet".
+// TENUTA di proposito benche' ora ridondante: e' cio' che fa sopravvivere il
+// blur a un rollback al ghostty dei repo, scenario concreto visto che
+// `ghostty-git` non si aggiorna con pacman (vedi CLAUDE.md).
+// Presupposto: la finestra deve essere SEMITRASPARENTE, altrimenti il backdrop
+// e' completamente coperto e non si vede nulla -- qui lo garantisce
+// `background-opacity = 0.60` in ghostty/.config/ghostty/config.
+// `xray` (blur calcolato una volta sul backdrop statico invece che per-frame)
+// lo abilita niri da solo quando un altro background-effect e' attivo.
+// L'INTENSITA' non e' regolabile qui: dentro `background-effect` sono ammessi
+// solo blur/xray/noise/saturation -- `passes` e `offset` vengono rifiutati con
+// `unexpected node` (verificato con `niri validate -c`). Si regola nella sezione
+// globale `blur {}` qui SOPRA, che pero' agisce solo sulle finestre che il blur
+// lo hanno chiesto: essendo ghostty l'unica, la sezione e' di fatto sua.
+// NB: un app-id sbagliato rende la regola SILENZIOSAMENTE inerte -- `niri
+// validate` risponde comunque `config is valid`. Verificare con `niri msg windows`.
+window-rule {
+    match app-id=r#"^com\.mitchellh\.ghostty$"#
+    background-effect {
+        blur true
+    }
 }

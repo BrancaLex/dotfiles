@@ -1,6 +1,6 @@
 # Crea i symlink delle config via GNU Stow. Esegue il backup dei file reali in conflitto.
 # Lo stow precede i framework, così oh-my-zsh/tpm/lazy.nvim trovano già le config corrette.
-WAYLAND_PKGS=(hyprland waybar walker elephant kitty zsh tmux nvim lazyvim wal wlogout distrobox systemd)
+WAYLAND_PKGS=(hyprland niri waybar walker elephant kitty ghostty zsh fish tmux nvim lazyvim wal wlogout swaync distrobox systemd)
 X11_PKGS=(i3 polybar picom rofi)
 
 mod_stow() {

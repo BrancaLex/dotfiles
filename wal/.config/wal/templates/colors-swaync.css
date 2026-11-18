@@ -1,0 +1,9 @@
+@define-color cc_bg {background};
+@define-color noti_bg {background};
+@define-color widget_bg alpha({foreground}, 0.05);
+@define-color accent {color4};
+@define-color accent2 {color2};
+@define-color error_color {color1};
+@define-color fg {foreground};
+@define-color fg_dim alpha({foreground}, 0.55);
+@define-color border_col alpha({color4}, 0.5);

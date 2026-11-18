@@ -1,0 +1,16 @@
+[Desktop Entry]
+# Override del .desktop di sistema: lancia yazi dentro ghostty invece di affidarsi
+# all'handler Terminal=true (su Hyprland non risolto in modo affidabile).
+# ghostty richiede la forma esplicita `-e <prog>` per eseguire un comando.
+Version=1.0
+Type=Application
+Name=Yazi File Manager
+GenericName=File Manager
+Comment=Blazing fast terminal file manager
+TryExec=yazi
+Exec=ghostty -e yazi %f
+Icon=yazi
+Terminal=false
+Categories=System;FileManager;FileTools;ConsoleOnly;
+Keywords=File;Manager;Explorer;Browser;
+MimeType=inode/directory;

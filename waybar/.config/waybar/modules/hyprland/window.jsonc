@@ -1,0 +1,21 @@
+{
+	"hyprland/window": {
+		"format": "{}",
+		"rewrite": {
+			"": "Desktop",
+			"kitty": "Terminal",
+			"ghostty": "Terminal",
+			"zsh": "Terminal",
+			"fish": "Terminal",
+			"~": "Terminal"
+		},
+		// "separate-outputs":
+		// "icon":
+		// "icon-size":
+		// "min-length":
+		// "max-length":
+		// "tooltip":
+		"swap-icon-label": false
+		// "expand":
+	}
+}

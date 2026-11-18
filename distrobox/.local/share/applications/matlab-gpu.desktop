@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=MATLAB R2026a (NVIDIA)
+GenericName=MATLAB
+Comment=MATLAB R2026a con rendering OpenGL su dGPU NVIDIA RTX 5060 (PRIME offload)
+Exec=/home/ale/.local/bin/matlab -desktop
+Icon=matlab
+Categories=Development;Science;Education;
+Terminal=false
+StartupNotify=true
+Keywords=matlab;calcolo;simulink;numerics;

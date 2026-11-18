@@ -1,0 +1,3 @@
+# This file contains fish universal variable definitions.
+# VERSION: 3.0
+SETUVAR fish_user_paths:/home/ale/\x2ebun/bin\x1e/home/ale/\x2eopencode/bin\x1e/home/ale/\x2enpm\x2dglobal/bin\x1e/home/ale/\x2elocal/bin

@@ -1,0 +1,119 @@
+/* Walker — corpo statico del tema (tracciato).
+ * I @define-color (window_bg_color, accent_bg_color, theme_fg_color,
+ * error_bg_color, item_selected_bg) NON sono qui: vengono prepesi da
+ * apply_theme.sh concatenando ~/.cache/wal/colors-walker.css davanti a questo
+ * file -> ~/.config/walker/themes/pywal/style.css (generato, in .gitignore).
+ *
+ * Niente @import: walker carica il CSS in modo che GTK4 non risolve
+ * `@import url("file://…")`, lasciando i colori indefiniti -> sfondo
+ * trasparente. La concatenazione mette le definizioni colore nello stesso file. */
+
+* {
+  font-family: "Hack Nerd Font", monospace;
+  all: unset;
+}
+
+/* Contenitore principale — SFONDO OPACO (fix leggibilità) + bordo/glow accento */
+.box-wrapper {
+  background: @window_bg_color;
+  border: 1px solid alpha(@accent_bg_color, 0.6);
+  border-radius: 16px;
+  padding: 18px;
+  box-shadow:
+    0 24px 48px rgba(0, 0, 0, 0.55),
+    0 0 0 1px alpha(@accent_bg_color, 0.15),
+    inset 0 1px 0 alpha(@theme_fg_color, 0.04);
+}
+
+popover {
+  background: lighter(@window_bg_color);
+  border: 1px solid alpha(@accent_bg_color, 0.5);
+  border-radius: 12px;
+  padding: 8px;
+}
+
+scrollbar { opacity: 0; }
+.normal-icons { -gtk-icon-size: 16px; }
+.large-icons  { -gtk-icon-size: 32px; }
+
+/* Input di ricerca */
+.search-container { border-radius: 10px; }
+.input {
+  caret-color: @accent_bg_color;
+  background: alpha(@theme_fg_color, 0.06);
+  color: @theme_fg_color;
+  padding: 11px 13px;
+  border-radius: 10px;
+  border: 1px solid alpha(@theme_fg_color, 0.08);
+}
+.input:focus,
+.input:active { border: 1px solid alpha(@accent_bg_color, 0.7); }
+.input placeholder { color: alpha(@theme_fg_color, 0.45); }
+.input selection { background: alpha(@accent_bg_color, 0.35); color: @theme_fg_color; }
+
+/* Lista risultati */
+.list { color: @theme_fg_color; }
+.item-box { border-radius: 9px; padding: 9px 11px; }
+.item-text-box { color: @theme_fg_color; }
+.item-subtext { font-size: 12px; opacity: 0.55; }
+.providerlist .item-subtext { font-size: unset; opacity: 0.75; }
+.item-image-text { font-size: 28px; }
+
+/* Elemento selezionato: tinta accento + barra accento a sinistra */
+child:selected .item-box,
+row:selected .item-box {
+  background: @item_selected_bg;
+  box-shadow: inset 3px 0 0 0 @accent_bg_color;
+}
+
+.item-quick-activation {
+  background: alpha(@accent_bg_color, 0.25);
+  border-radius: 6px;
+  padding: 9px;
+}
+
+/* Anteprima */
+.preview-box,
+.elephant-hint,
+.placeholder { color: @theme_fg_color; }
+.preview {
+  border: 1px solid alpha(@accent_bg_color, 0.25);
+  border-radius: 10px;
+  color: @theme_fg_color;
+}
+.preview .large-icons { -gtk-icon-size: 64px; }
+
+/* Provider-specifici */
+.calc .item-text { font-size: 24px; }
+.symbols .item-image { font-size: 24px; }
+.todo.done .item-text-box { opacity: 0.3; }
+.todo.urgent { font-size: 24px; }
+.todo.active { font-weight: bold; }
+.bluetooth.disconnected { opacity: 0.5; }
+:not(.calc).current { font-style: italic; }
+.preview-content.archlinuxpkgs,
+.preview-content.dnfpackages { font-family: monospace; }
+
+/* Hint dei keybind */
+.keybinds {
+  padding-top: 10px;
+  border-top: 1px solid alpha(@theme_fg_color, 0.12);
+  font-size: 12px;
+  color: @theme_fg_color;
+}
+.keybind-button { opacity: 0.5; }
+.keybind-button:hover { opacity: 0.85; }
+.keybind-bind { text-transform: lowercase; opacity: 0.4; }
+.keybind-label {
+  padding: 2px 5px;
+  border-radius: 4px;
+  border: 1px solid alpha(@theme_fg_color, 0.4);
+}
+
+/* Errori */
+.error {
+  padding: 10px;
+  background: @error_bg_color;
+  color: @error_fg_color;
+  border-radius: 8px;
+}

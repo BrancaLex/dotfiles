@@ -1,0 +1,25 @@
+@import "../../.cache/wal/colors-waybar.css";
+
+@define-color accent        @color4;
+@define-color main-br       @color4;
+@define-color main-bg       @background;
+@define-color main-fg       @foreground;
+@define-color hover-bg      alpha(@color4, 0.3);
+@define-color hover-fg      @foreground;
+@define-color outline       @color8;
+
+/* Moduli scuri e opachi (tonali su @color0) */
+@define-color workspaces    alpha(@color0, 1.0);
+@define-color temperature   alpha(@color0, 1.0);
+@define-color memory        alpha(@color0, 1.0);
+@define-color cpu           alpha(@color0, 1.0);
+@define-color time          alpha(@color0, 1.0);
+@define-color date          alpha(@color0, 1.0);
+@define-color tray          alpha(@color0, 1.0);
+@define-color volume        alpha(@color0, 1.0);
+@define-color backlight     alpha(@color0, 1.0);
+@define-color battery       alpha(@color0, 1.0);
+
+@define-color warning       @color3;
+@define-color critical      @color1;
+@define-color charging      @color2;

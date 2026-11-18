@@ -1,0 +1,9 @@
+# Pacchetti specifici della macchina-laptop (ASUS ROG): esclusi sui desktop.
+# Il modulo 30-packages li salta quando lo chassis NON è un laptop (override: --laptop).
+# I nomi devono combaciare esatti con le voci in pacman-explicit.txt / aur-explicit.txt.
+# Questo file sopravvive a capture-system.sh (che rigenera solo i due manifest principali).
+asusctl
+linux-g14
+linux-g14-headers
+rog-control-center
+supergfxctl

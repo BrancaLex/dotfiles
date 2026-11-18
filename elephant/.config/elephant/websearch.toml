@@ -1,0 +1,16 @@
+# Provider websearch di elephant, ridotto a un solo motore: Claude.
+# Un solo engine => indice 0 => l'attivazione "posizionale" di walker colpisce
+# sempre Claude. Nessun engine http => nessuna apertura del browser.
+command = "/home/ale/.config/walker/scripts/claude_query.sh"
+engines_as_actions = false
+# Niente engine "default": la riga Claude resta un fallback a basso punteggio
+# (score 15) che le app del launcher seppelliscono quando c'è un match reale,
+# quindi non ruba l'INVIO. Compare da sola solo su query senza corrispondenze.
+always_show_default = false
+
+# Prefisso "-p" + testo -> interroga Claude. Engine unico => indice 0.
+[[entries]]
+name = "Claude"
+prefix = "-p"
+url = "%TERM%"
+icon = "claude"

@@ -34,3 +34,11 @@ bootstrap.log
 # nel repo, quindi senza questa riga il file generato comparirebbe tra le
 # modifiche tracciate. Solo il fallback statico in config.kdl è tracciato.
 niri/.config/niri/wal-colors.kdl
+
+# Profilo GPU (MUX ibrido/dGPU): moduli GENERATI al login da
+# hyprland/.config/hypr/scripts/gpu-profile.sh. Solo lo script e' tracciato.
+hyprland/.config/hypr/gpu-profile.lua
+niri/.config/niri/gpu-profile.kdl
+
+# Quickshell: symlink al VFS in tmpfs, rigenerato da qs a ogni avvio
+quickshell/.config/quickshell/ale/.qmlls.ini

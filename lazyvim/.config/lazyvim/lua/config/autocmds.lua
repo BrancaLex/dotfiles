@@ -6,3 +6,6 @@
 --
 -- Or remove existing autocmds by their group name (which is prefixed with `lazyvim_` for the defaults)
 -- e.g. vim.api.nvim_del_augroup_by_name("lazyvim_wrap_spell")
+
+-- SIGUSR1: segui il tema GTK (dark/light) inviato da apply_theme.sh (pkill -SIGUSR1 nvim)
+-- Funzione per interrogare D-Bus e applicare lo sfondo corretto

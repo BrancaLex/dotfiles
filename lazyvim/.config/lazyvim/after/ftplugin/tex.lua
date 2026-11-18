@@ -20,6 +20,12 @@ local templates = vim.fn.stdpath("config") .. "/templates"
 vim.opt_local.synmaxcol = 0 -- no limit
 vim.opt_local.conceallevel = 0 -- keep `` visible
 
+-- Auto-Break linke
+-- ~/.config/nvim/after/ftplugin/tex.lua
+vim.opt_local.wrap = true
+vim.opt_local.linebreak = true -- Wraps at word boundaries instead of mid-word
+vim.opt_local.breakindent = true -- Preserves indentation for wrapped lines
+
 -- VimTeX omni-completion (consumed by blink's `omni` source, see lua/plugins/tex.lua).
 vim.bo.omnifunc = "vimtex#complete#omnifunc"
 
@@ -129,12 +135,32 @@ if ok_wk then
   wk.add({
     { "<leader>l", group = "latex", icon = "󰙩", buffer = 0 },
     { "<leader>la", "<cmd>lua PdfAnnots()<CR>", desc = "annotate", icon = "󰏪", buffer = 0 },
-    { "<leader>lb", function() run_bibexport() end, desc = "bib export", icon = "󰈝", buffer = 0 },
+    {
+      "<leader>lb",
+      function()
+        run_bibexport()
+      end,
+      desc = "bib export",
+      icon = "󰈝",
+      buffer = 0,
+    },
     { "<leader>lc", "<cmd>VimtexCompile<CR>", desc = "compile", icon = "󰖷", buffer = 0 },
-    { "<leader>ld", "<cmd>terminal LATEXMK_DRAFT_MODE=1 latexmk -pdf -e '$draft_mode=1' %:p<CR>", desc = "draft mode", icon = "󰌶", buffer = 0 },
+    {
+      "<leader>ld",
+      "<cmd>terminal LATEXMK_DRAFT_MODE=1 latexmk -pdf -e '$draft_mode=1' %:p<CR>",
+      desc = "draft mode",
+      icon = "󰌶",
+      buffer = 0,
+    },
     { "<leader>le", "<cmd>VimtexErrors<CR>", desc = "errors", icon = "󰅚", buffer = 0 },
     { "<leader>lf", "<cmd>terminal latexmk -pdf %:p<CR>", desc = "final build", icon = "󰸞", buffer = 0 },
-    { "<leader>lg", "<cmd>exe 'edit ' . stdpath('config') . '/templates/glossary.tex'<CR>", desc = "glossary", icon = "󰈚", buffer = 0 },
+    {
+      "<leader>lg",
+      "<cmd>exe 'edit ' . stdpath('config') . '/templates/glossary.tex'<CR>",
+      desc = "glossary",
+      icon = "󰈚",
+      buffer = 0,
+    },
     { "<leader>lh", "<cmd>terminal latexindent -w %:p:r.tex<CR>", desc = "format", icon = "󰉣", buffer = 0 },
     { "<leader>li", "<cmd>VimtexTocOpen<CR>", desc = "index", icon = "󰋽", buffer = 0 },
     { "<leader>lk", "<cmd>VimtexClean<CR>", desc = "kill aux", icon = "󰩺", buffer = 0 },
@@ -160,13 +186,65 @@ if ok_wk then
 
   wk.add({
     { "<leader>T", group = "templates", icon = "󰈭", buffer = 0 },
-    { "<leader>Ta", "<cmd>exe 'read ' . stdpath('config') . '/templates/article.tex'<CR>", desc = "article.tex", icon = "󰈙", buffer = 0 },
-    { "<leader>Tb", "<cmd>exe 'read ' . stdpath('config') . '/templates/beamer_slides.tex'<CR>", desc = "beamer_slides.tex", icon = "󰈙", buffer = 0 },
-    { "<leader>Tg", "<cmd>exe 'read ' . stdpath('config') . '/templates/glossary.tex'<CR>", desc = "glossary.tex", icon = "󰈙", buffer = 0 },
-    { "<leader>Th", "<cmd>exe 'read ' . stdpath('config') . '/templates/handout.tex'<CR>", desc = "handout.tex", icon = "󰈙", buffer = 0 },
-    { "<leader>Tl", "<cmd>exe 'read ' . stdpath('config') . '/templates/letter.tex'<CR>", desc = "letter.tex", icon = "󰈙", buffer = 0 },
-    { "<leader>Tk", "<cmd>exe 'read ' . stdpath('config') . '/templates/arc_tikz.tex'<CR>", desc = "arc_tikz.tex", icon = "󰈙", buffer = 0 },
-    { "<leader>Tr", function() copy_template_dir("report") end, desc = "copy report/ dir", icon = "󰉖", buffer = 0 },
-    { "<leader>Ts", function() copy_template_dir("springer") end, desc = "copy springer/ dir", icon = "󰉖", buffer = 0 },
+    {
+      "<leader>Ta",
+      "<cmd>exe 'read ' . stdpath('config') . '/templates/article.tex'<CR>",
+      desc = "article.tex",
+      icon = "󰈙",
+      buffer = 0,
+    },
+    {
+      "<leader>Tb",
+      "<cmd>exe 'read ' . stdpath('config') . '/templates/beamer_slides.tex'<CR>",
+      desc = "beamer_slides.tex",
+      icon = "󰈙",
+      buffer = 0,
+    },
+    {
+      "<leader>Tg",
+      "<cmd>exe 'read ' . stdpath('config') . '/templates/glossary.tex'<CR>",
+      desc = "glossary.tex",
+      icon = "󰈙",
+      buffer = 0,
+    },
+    {
+      "<leader>Th",
+      "<cmd>exe 'read ' . stdpath('config') . '/templates/handout.tex'<CR>",
+      desc = "handout.tex",
+      icon = "󰈙",
+      buffer = 0,
+    },
+    {
+      "<leader>Tl",
+      "<cmd>exe 'read ' . stdpath('config') . '/templates/letter.tex'<CR>",
+      desc = "letter.tex",
+      icon = "󰈙",
+      buffer = 0,
+    },
+    {
+      "<leader>Tk",
+      "<cmd>exe 'read ' . stdpath('config') . '/templates/arc_tikz.tex'<CR>",
+      desc = "arc_tikz.tex",
+      icon = "󰈙",
+      buffer = 0,
+    },
+    {
+      "<leader>Tr",
+      function()
+        copy_template_dir("report")
+      end,
+      desc = "copy report/ dir",
+      icon = "󰉖",
+      buffer = 0,
+    },
+    {
+      "<leader>Ts",
+      function()
+        copy_template_dir("springer")
+      end,
+      desc = "copy springer/ dir",
+      icon = "󰉖",
+      buffer = 0,
+    },
   })
 end

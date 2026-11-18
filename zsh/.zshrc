@@ -26,7 +26,7 @@ ZSH_THEME="robbyrussell"
 
 # Uncomment one of the following lines to change the auto-update behavior
 # zstyle ':omz:update' mode disabled  # disable automatic updates
-# zstyle ':omz:update' mode auto      # update automatically without asking
+zstyle ':omz:update' mode auto      # update automatically without asking
 # zstyle ':omz:update' mode reminder  # just remind me to update when it's time
 
 # Uncomment the following line to change how often to auto-update (in days).
@@ -42,7 +42,7 @@ ZSH_THEME="robbyrussell"
 # DISABLE_AUTO_TITLE="true"
 
 # Uncomment the following line to enable command auto-correction.
-# ENABLE_CORRECTION="true"
+ENABLE_CORRECTION="true"
 
 # Uncomment the following line to display red dots whilst waiting for completion.
 # You can also set it to another string to have that shown instead of the default red dots.
@@ -71,7 +71,7 @@ ZSH_THEME="robbyrussell"
 # Custom plugins may be added to $ZSH_CUSTOM/plugins/
 # Example format: plugins=(rails git textmate ruby lighthouse)
 # Add wisely, as too many plugins slow down shell startup.
-plugins=(git zsh-syntax-highlighting zsh-autosuggestions)
+plugins=(git zsh-syntax-highlighting web-search gh docker history copypath extract archlinux fzf copyfile copybuffer dirhistory kitty sudo tmux  zsh-autosuggestions)
 
 source $ZSH/oh-my-zsh.sh
 
@@ -86,8 +86,12 @@ source $ZSH/oh-my-zsh.sh
 # if [[ -n $SSH_CONNECTION ]]; then
 #   export EDITOR='vim'
 # else
-#   export EDITOR='nvim'
+export EDITOR='lv'
 # fi
+#
+export XCURSOR_THEME=Breeze
+export XCURSOR_SIZE=24
+export TERMINAL=ghostty
 
 # Compilation flags
 # export ARCHFLAGS="-arch $(uname -m)"
@@ -103,8 +107,8 @@ source $ZSH/oh-my-zsh.sh
 # Example aliases
 # alias zshconfig="mate ~/.zshrc"
 # alias ohmyzsh="mate ~/.oh-my-zsh"
-source /opt/ros/jazzy/setup.zsh
-source /home/alessandro-biagio-branca/.zsh/zsh-autosuggestions/zsh-autosuggestions.zsh
+#source /opt/ros/jazzy/setup.zsh
+#source /home/alessandro-biagio-branca/.zsh/zsh-autosuggestions/zsh-autosuggestions.zsh
 # Alias per il cambio layout tastiera
 alias it='setxkbmap it && echo "Layout impostato: ITALIANO"'
 alias us='setxkbmap us && echo "Layout impostato: AMERICANO"'
@@ -116,6 +120,8 @@ alias t='tmux'
 alias nvcp='nvim "$(kitten choose_files)"'
 alias cl='clear'
 alias lv='NVIM_APPNAME=lazyvim nvim'
+alias ml='/home/ale/.local/bin/matlab'
+alias db='distrobox'
 export PATH="$HOME/.local/bin:$PATH"
 
 # Avvia Redshift in background per Reggio Emilia
@@ -124,7 +130,7 @@ if ! pgrep -x "redshift" > /dev/null; then
     (redshift -l 44.70:10.63 &> /dev/null &)
 fi
 
-eval "$(oh-my-posh init zsh --config '/home/Ale/Documents/Themes/OMP/catppuccin_macchiato.omp.json')"
+eval "$(oh-my-posh init zsh --config '/home/ale/Documents/Themes/OMP/pywal.omp.json')"
 
 
 bindkey -v
@@ -139,3 +145,63 @@ function zle-keymap-select {
   zle reset-prompt
 }
 zle -N zle-keymap-select
+
+fastfetch
+
+# Migliora contrasto evidenziatore di sintassi
+# Forza l'uso dei colori 'bright' della palette
+ZSH_HIGHLIGHT_STYLES[command]='fg=color12,bold'
+ZSH_HIGHLIGHT_STYLES[alias]='fg=color13,bold'
+ZSH_HIGHLIGHT_STYLES[path]='fg=color14'
+ZSH_HIGHLIGHT_STYLES[builtin]='fg=color11,bold'
+export VISUAL='nvim'
+
+# Start gnome-keyring-daemon
+if [ -n "$DBUS_SESSION_BUS_ADDRESS" ]; then
+    eval $(gnome-keyring-daemon --start --components=secrets)
+    export GNOME_KEYRING_CONTROL
+    export GNOME_KEYRING_PID
+    export GPG_AGENT_INFO
+    export SSH_AUTH_SOCK
+fi
+export PATH="$HOME/.npm-global/bin:$PATH"
+
+# opencode
+export PATH=/home/ale/.opencode/bin:$PATH
+
+# bun completions
+[ -s "/home/ale/.bun/_bun" ] && source "/home/ale/.bun/_bun"
+
+function y() {
+	local tmp="$(mktemp -t "yazi-cwd.XXXXXX")" cwd
+	command yazi "$@" --cwd-file="$tmp"
+	IFS= read -r -d '' cwd < "$tmp"
+	[ "$cwd" != "$PWD" ] && [ -d "$cwd" ] && builtin cd -- "$cwd"
+	command rm -f -- "$tmp"
+}
+
+# bun
+export BUN_INSTALL="$HOME/.bun"
+export PATH="$BUN_INSTALL/bin:$PATH"
+export NVD_BACKEND=direct
+# Profilo GPU dal MUX (vedi gpu-profile.sh / config.fish).
+if [[ -x ~/.config/hypr/scripts/gpu-profile.sh ]]; then
+	while IFS='=' read -r k v; do export "$k=$v"; done < <(~/.config/hypr/scripts/gpu-profile.sh env)
+else
+	export LIBVA_DRIVER_NAME=radeonsi VDPAU_DRIVER=radeonsi
+fi
+# NON reintrodurre MESA_LOADER_DRIVER_OVERRIDE=radeonsi: se zsh torna a essere la login
+# shell, Hyprland eredita la variabile e il blit multi-GPU verso l'HDMI sulla dGPU
+# fallisce (monitor esterno nero). Stessa motivazione documentata in config.fish.
+export WOKWI_CLI_TOKEN=wok_1oILPdXlQysKbvDFAwnMMjhWboELo3oM928fbeee
+
+
+eval "$(zoxide init zsh)"
+
+
+# ESP-IDF environment (v6.0.1)
+alias get_idf='. /home/ale/.espressif/v6.0.1/esp-idf/export.sh'
+
+
+# Added by Antigravity CLI installer
+export PATH="/home/ale/.local/bin:$PATH"

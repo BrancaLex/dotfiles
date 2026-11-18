@@ -1,15 +1,16 @@
 return {
   {
-    "folke/tokyonight.nvim",
-    lazy = false,
+    "catppuccin/nvim",
+    name = "catppuccin",
     priority = 1000,
     opts = {
-      style = "night", -- The darkest variant
-      transparent = true, -- This will use your terminal's background
-      styles = {
-        sidebars = "transparent",
-        floats = "transparent",
-      },
+      flavour = "mocha", -- Change to "latte", "frappe", or "macchiato" if needed
+    },
+  },
+  {
+    "LazyVim/LazyVim",
+    opts = {
+      colorscheme = "catppuccin",
     },
   },
 }

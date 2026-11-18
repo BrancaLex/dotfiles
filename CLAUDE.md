@@ -105,7 +105,25 @@ Yazi theming:
 - Template brace-escaping: same gotcha as walker — TOML inline-table braces `{ }`
   must be escaped as `{{ }}` in the template (pywal uses `str.format`).
 
-Walker theming (walker 2.16 + `elephant` backend):
+**The launcher is quickshell, not walker** (`quickshell/.config/quickshell/ale/services/Launcher.qml` for data,
+`island/LauncherView.qml` for the UI in the island pill). `Mod+Space` → `qs -c ale ipc call launcher toggle`
+(same under Hyprland and niri); IPC `toggle|open|close|wallpapers|search <q>|activate|status`. It shares the
+"one panel at a time, on the focused output" slot with the Control Center (`Ui.panel`), and takes
+`WlrKeyboardFocus.Exclusive` only while open. Rows: apps (`DesktopEntries`, fuzzy score + launch-count frecency
+persisted in `Quickshell.statePath("launcher.json")`), calculator (`qalc -t`, **only** when the query has a digit
+or starts with `=` — otherwise qalc reads words as units: `firefox` → `0 B`), and a last "Chiedi a Claude" row
+(`claude -p`, answer shown in the pill and copied to the clipboard; a notification if the pill was closed meanwhile).
+`claude -p` needs `</dev/null`: without it it waits 3 s for stdin and prepends a warning to the answer.
+**GPU env is per process:** apps are children of the shell, which has no EGL pin (Hyprland keeps it out of
+`hl.env`), so in `hybrid` the launcher adds `__EGL_VENDOR_LIBRARY_FILENAMES=…50_mesa.json` to each launch
+(profile read from `gpu-profile.sh env`). That is what makes it safe under niri too, where the pin must not sit in
+the activation environment. Same bug it replaces: elephant started in parallel with
+`dbus-update-activation-environment`, missed the pin, and Spotify 1.3.4 SIGSEGV'd in `libnvidia-egl-wayland2`.
+`ALT+W` still runs `select_wallpaper.sh`: with no argument it opens the launcher in wallpaper mode and exits (an
+IPC call cannot block like `walker --dmenu`), and the launcher re-runs it with the chosen path.
+Walker/elephant are no longer started (`elephant.service` disabled, machine-local); config kept for rollback.
+
+Walker theming — LEGACY (walker 2.16 + `elephant` backend, replaced by the quickshell launcher):
 - `config.toml` sets `theme = "pywal"`, which **inherits** the system default theme's
   layout XMLs (`/etc/xdg/walker/themes/default/`) — only the CSS is overridden. The
   CSS must live at `themes/pywal/style.css`, not the config-dir root (root CSS yields
@@ -134,7 +152,31 @@ wlogout theming (`apply_theme.sh` step 12):
 - **No hot-reload, no daemon** — wlogout reads `style.css` fresh at every launch.
 - Palette mapping: `color4`=accent (border, hover bg), `color2`=secondary, `color1`=error.
 
-swaync theming (`apply_theme.sh` step 15; notification daemon `org.erikreider.swaync`):
+**Notifications are served by quickshell, not swaync** (`quickshell/.config/quickshell/ale/services/Notifs.qml`,
+popups shown one at a time in the island pill). `org.freedesktop.Notifications` admits a single owner, and
+swaync's D-Bus activation file (`/usr/share/dbus-1/services/org.erikreider.swaync.service`) claims that very
+name with `SystemdService=swaync.service` — a mere `disable` would let the first `notify-send` sent while the
+shell is down resurrect it, so the unit is **masked** (`systemctl --user mask swaync.service`, machine-local
+symlink in a real `~/.config/systemd/user/`, not in the repo; `unmask` + `enable --now` to revert). quickshell
+requests the name *queued*: it takes it over the instant the previous owner leaves, no restart needed.
+IPC (same command under Hyprland and niri): `qs -c ale ipc call notifs toggleDnd|activate|dismiss|clear|status`,
+`inhibit|uninhibit <id>` (used by `screenshare-inhibit.sh`, now level-triggered: it re-asserts every tick so the
+inhibitor survives a shell restart mid-share). `Mod+Shift+N` = **Control Center** in the pill
+(`island/ControlCenter.qml`, IPC `qs -c ale ipc call cc toggle|open|close`, Esc closes it): same widgets as the old
+swaync panel — 4×2 toggles (Wi‑Fi, BT, DND, night light `wlsunset`, dark/light `apply_theme.sh`, airplane
+`rfkill`, power profile, screenshot), volume/brightness sliders, mpris, notification history. It opens on the
+focused output only (Hyprland IPC / `niri msg --json focused-output`) and takes `WlrKeyboardFocus.Exclusive`
+while open (Esc needs a keyboard), never otherwise. Popups that time out leave the queue but stay **tracked** as
+history (cap 50; transient ones expire); while the CC is open new notifications skip the popup and land in the
+list. Its content has a **fixed** width and is only revealed by the growing, clipped pill, so no layout reflows
+mid-animation. Two measured traps:
+`Notification.expireTimeout` is in **milliseconds** (`notify-send -t 2000` → 2000) although the v0.3.1 docs say
+"seconds"; and with `keepOnReload` every reload re-emits notifications and destroys the old objects, so close
+only what is still `tracked` or the log fills with `Cannot close destroyed notification`. Not ported from swaync:
+click-outside-to-close (a layer surface sees no clicks outside its input region — use Esc or the shortcut).
+The swaync notes below are **legacy** (config kept for rollback).
+
+swaync theming — LEGACY (`apply_theme.sh` step 15; notification daemon `org.erikreider.swaync`, now masked):
 - Template `wal/.config/wal/templates/colors-swaync.css` → rendered to
   `~/.cache/wal/colors-swaync.css` by `wal`. `apply_theme.sh` concatenates it with
   `swaync/.config/swaync/style-body.css` (static, tracked) → `~/.config/swaync/style.css`
@@ -240,6 +282,48 @@ Both are LazyVim-based: plugins live under `lua/plugins/*.lua`, pinned in
   `~/.config/xdg-terminals.list` (`com.mitchellh.ghostty.desktop`), and `$TERMINAL`
   (fish `config.fish` + `zsh/.zshrc` fallback). Window class is
   `com.mitchellh.ghostty` (used by the `ghostty-opacity` window rule).
+- **Background blur is a *protocol* negotiation, and a mismatch fails silently.** On
+  Wayland a client cannot blur itself: it declares a region to the compositor over a
+  dedicated protocol. `extra/ghostty` 1.3.1 speaks only `org_kde_kwin_blur`, which
+  **KWin 6.7 dropped from its Wayland build** (`libkwin.so.6.7.4` carries only
+  `ext_background_effect_manager_v1`; the legacy name survives *only* in
+  `libkwin-x11.so` — the two KWin variants ship **divergent protocol sets**, which is
+  why ghostty's docs still claim "KDE Plasma (Wayland and X11)"). Empty intersection →
+  the global is never bound and blur is skipped with **no log line at all**, same class
+  of silent failure as `hyprctl keyword` under the Lua parser. `background-blur = true`
+  in the config is necessary but not sufficient.
+  **The diagnostic is symbol intersection, not logs:** `strings` the client *and* the
+  compositor and compare — `strings /usr/bin/ghostty | grep -E "ext_background_effect|org_kde_kwin_blur"`
+  against the same grep on `/usr/lib/libkwin.so.6`. Everything else misleads: the config
+  parses (`ghostty +show-config` shows the option set), the effect is loaded
+  (`qdbus6 org.kde.KWin /Effects … isEffectLoaded blur` → `true`), and the journal is clean.
+  There is **no** KWin-side workaround: Blur is a builtin effect inside `libkwin.so`
+  exposing only `BlurStrength`/`NoiseStrength`, and the internal `WindowForceBlurRole`
+  is unreachable from the scripting API.
+  **Fix: `aur/ghostty-git/`** — a local copy of the AUR PKGBUILD with three corrections
+  it does not build without (`paru -S ghostty-git` aborts during dependency resolution,
+  before it even offers to edit): `zig<0.16.0` → `zig`; drop `--system` from `zig build`
+  in favour of `ZIG_GLOBAL_CACHE_DIR` (zig 0.16 stores cached packages as `.tar.gz`,
+  `--system` wants extracted trees); and drop `usr/share/terminfo/g/ghostty`, now owned
+  by ncurses 6.6 (`extra/ghostty-terminfo` ships only `x/xterm-ghostty` for the same
+  reason). Full rationale in that README.
+  **All three compositors here expose the protocol** — KWin 6.7.4, niri 26.04,
+  Hyprland 0.56.2 — so the option is portable. Under Hyprland nothing shows anyway
+  because `hyprland.lua`'s `decoration:blur:enabled = false`. Under niri the blur also
+  arrives by a second, independent route: the `background-effect { blur true }`
+  window-rule in `config.kdl`, which niri 26.04's release notes call the fallback "for
+  apps that don't support ext-background-effect yet" — **kept on purpose** as insurance
+  against a rollback to the repo package.
+  **Bootstrap derogation:** `ghostty-git` and its two split siblings are deliberately
+  **kept out of `pkglist/aur-explicit.txt`**, and `ghostty` is hand-kept in
+  `pkglist/pacman-explicit.txt` (where `pacman -Qqen` no longer reports it, since
+  `ghostty-git` `provides` it). Otherwise `30-packages` would fail on the AUR build and
+  leave a freshly provisioned machine **with no terminal at all**. `capture-system.sh`
+  is a 1:1 snapshot and silently undoes both edits — reapply them after every capture
+  (each file carries a `#` comment saying so; `_install_manifest` filters those out).
+  **Exit condition:** go back to the repo package once ghostty ≥ 1.4 lands in `extra`,
+  or once GTK reaches 4.23.3 — from that version GTK does the blur itself and ghostty
+  skips its own path (`src/apprt/gtk/winproto/wayland.zig`).
 - **App launch latency: keep the process resident.** Both terminal and browser were
   paying a full cold start on every keybind; the fix is the same idea in two dialects.
   - **ghostty** — `gtk-single-instance` and `quit-after-last-window-closed` are
@@ -286,6 +370,29 @@ Both are LazyVim-based: plugins live under `lua/plugins/*.lua`, pinned in
   refreshing, not storage. It scales with compositing activity, which makes it look
   causal. Diagnose real I/O with device busy time (`/proc/diskstats` field 13) and
   per-process `/proc/PID/io` deltas instead. Reading `/proc/PID/stack` needs root.
+- **`cachyos-settings` is installed, minus one rule: `20-audio-pm.rules` is masked.** It sets
+  `snd_hda_intel power_save=0` on AC, which would pin the dGPU's HDMI-audio function
+  (`01:00.1`) awake — and runtime D3cold needs *every* function of the slot suspended, so the
+  whole RTX would stay up. Masked with `/etc/udev/rules.d/20-audio-pm.rules -> /dev/null`
+  (machine-local, not stowed; re-create on a new install). Local overrides still win by
+  lexical order: `99-swappiness.conf` (150) over the package's `70-` (100), and
+  `/etc/systemd/zram-generator.conf` (`ram / 2`) over `/usr/lib/…`. Scheduler is
+  **`scx_lavd`** via `scx_loader` (`/etc/scx_loader/config.toml`, Auto = `--autopower`, which
+  follows the EPP that `99-power-profile-switch.rules` flips). GRUB cmdline carries
+  `plymouth.enable=0` instead of `splash` (ly is a TUI DM; plymouth only cost ~2.7 s of
+  `plymouth-quit-wait`). **Measuring the dGPU:** `nvidia-smi` itself wakes it — judge idle by
+  `runtime_active_time` deltas over ≥30 s with nothing touching the card; steady state is
+  0 ms active with HDMI unplugged. `Enabling HDA controller` in `journalctl -k` marks each wake.
+  **Initramfs: no NVIDIA, no `kms` hook — 247 → 50 MB.** `/etc/mkinitcpio.conf` is
+  `MODULES=(amdgpu asus_wmi asus_nb_wmi)` with `kms` dropped from `HOOKS`. Do **not** re-add the
+  NVIDIA-wiki early-KMS modules: the panel is on the iGPU, `nvidia*` is only needed by Hyprland
+  for the HDMI blit and udev loads it long before the ly login. Dropping them alone left 157 MB,
+  because `autodetect` resolves the RTX modalias via `modprobe -R`, which **ignores
+  `blacklist nouveau`** (blacklist gates loading, not alias resolution) → `kms` packed
+  `nouveau.ko` + ~660 GSP firmware files. `amdgpu` is listed explicitly to keep early KMS on
+  the panel. GRUB reads the image through UEFI, so its size is paid as loader time on every
+  boot. Only `linux-cachyos` was rebuilt on purpose; `linux-g14` keeps the old image as a
+  fallback entry until a `mkinitcpio -P`.
 - **Under the Lua parser, `hyprctl dispatch` also needs Lua syntax.** Same class of
   gotcha as `hyprctl keyword` (which simply fails). `hyprctl dispatch exec "foo"`
   errors with `')' expected`, and `exec(...)` is not a global; the working form is
@@ -313,6 +420,36 @@ Both are LazyVim-based: plugins live under `lua/plugins/*.lua`, pinned in
   first run. Verified: it *does* append the line (at the end of `hyprland.conf`) — remove
   that single line with an edit, **not** `git checkout`, or you lose the file's other
   uncommitted changes.
+- **HyprGlass / hyprpm: "Version mismatch" after a library upgrade, and `hyprpm` hides it
+  twice.** Plugin `hyprnux/hyprglass`, config in `hyprland/.config/hypr/plugins/hyprglass.lua`
+  (guarded on `hl.plugin.hyprglass`, so a plugin that failed to load silently skips it).
+  Every plugin compares an ABI string `<commit>_aq_<aquamarine>_hu_<hyprutils>_hg_…` baked in
+  from the headers it was compiled with (`__hyprland_api_get_hash`) against the running
+  compositor's (`__hyprland_api_get_client_hash`, exposed as `hyprctl -j version` →
+  `abiHash`). A pacman upgrade of aquamarine/hyprutils/hyprgraphics/hyprcursor/hyprlang
+  (e.g. aquamarine 0.14 → 0.15 on 2026-09-04) changes the compositor's string while the
+  plugin keeps the old one → `hyprctl plugin load …` answers `plugin crashed/threw in main:
+  Version mismatch`. **`hyprpm update` does NOT fix it**: its `headersValid()` only compares
+  `GIT_COMMIT_HASH` in `/var/cache/hyprpm/$USER/headersRoot/include/hyprland/src/version.h`
+  with the running commit, so the cached headers (still `AQUAMARINE_VERSION "0.14.0"`) are
+  reused and the plugin is rebuilt with the stale ABI — the right command is
+  **`hyprpm update -f`** (force regenerates the headers) then `hyprpm reload -n`.
+  Two more traps: **`hyprpm enable` never loads anything** (it only flips `enabled` in
+  `state.toml`; only `reload` sends `/plugin load`), and **`hyprpm reload` prints
+  `✔ Loaded hyprglass` without reading the socket reply** — `hyprctl plugins list` is the
+  only judge. The compositor log stays empty because `debug:disable_logs` defaults to `true`,
+  so run `hyprctl plugin load /var/cache/hyprpm/$USER/HyprGlass/hyprglass.so` by hand to see
+  the actual error text. Fingerprint check: `grep AQUAMARINE_VERSION …/headersRoot/…/version.h`
+  vs `pacman -Q aquamarine`. `HYPRGLASS_SKIP_VERSION_CHECK` exists but is an ABI gamble that
+  can crash the compositor — never set it. Note `/var/cache/hyprpm` is root-owned and hyprpm
+  installs there via `sudo`, so `update` must run from an interactive terminal.
+  **A third, more basic trap: `hyprpm` can vanish outright.** From `hyprland 0.56.2-3`
+  (2026-09-26) the binary is a **separate package** (`extra/hyprpm`); a split never installs
+  its new sibling, so after the upgrade `/usr/bin/hyprpm` was simply gone. The startup
+  `hl.exec_cmd("hyprpm reload -n")` then fails with command-not-found **silently**, the
+  `hl.plugin.hyprglass` guard skips the config, and `hyprctl plugins list` says `No plugins
+  loaded` — while the ABI hash still matches perfectly. Check `command -v hyprpm` **before**
+  chasing a version mismatch; `hyprpm` is now listed in `pkglist/pacman-explicit.txt`.
 - **OpenWhispr's "Wayland Paste Setup" nag is cosmetic here — `wtype` already covers it,
   and upstream's fix would not work on Arch.** The app bundles
   `/opt/openwhispr/resources/bin/linux-fast-paste`, tries it *first*
@@ -328,6 +465,102 @@ Both are LazyVim-based: plugins live under `lua/plugins/*.lua`, pinned in
   not done — granting uinput lets any process of this user inject input kernel-side for the
   whole session. Health check for wtype: `wtype ''` exits 0 (it binds
   `zwp_virtual_keyboard_manager_v1`; it errors out if the compositor lacks the protocol).
+- **Under niri, OpenWhispr is inert unless you lie to it about the compositor.** Symptom:
+  launching it from Walker shows no window and `CTRL+SUPER+D` does nothing. Three separate
+  defects, one root cause. The app registers its D-Bus service `com.openwhispr.App` — the
+  *only* channel a foreign keybind can toggle dictation on — exclusively inside
+  `HotkeyManager.initializeHyprlandShortcuts()`, gated on `isHyprland()` (just
+  `HYPRLAND_INSTANCE_SIGNATURE`, or the substring `hyprland` in `XDG_CURRENT_DESKTOP`) **and**
+  `isHyprctlAvailable()` (`hyprctl version` must exit 0). There is **no generic wlroots
+  branch** — outside that `if`, the function plainly `return false`s. So under niri
+  `initDBusService()` is never called, the well-known name never reaches the bus, and
+  `config.kdl`'s `Ctrl+Mod+D` `dbus-send` dies with `name is not activatable`, **silently**.
+  There is no fallback: Electron `globalShortcut` has no global grab on Wayland. Ground truth
+  is `busctl --user list | grep -i openwhispr` with the app running — a unique name
+  (`:1.NNNN`) alone means the integration is off. The same flag governs
+  `isWlrootsCompositor()`, whose list (`sway/hyprland/wayfire/river/dwl/labwc/cage`) omits
+  `niri`, so the **paste** chain misses `wtype` too — one variable fixes both.
+  **Fix, in `~/.local/bin/openwhispr`** (machine-local, *not* stowed, like `browser-amd-env`),
+  applied only when `$NIRI_SOCKET` is set: `HYPRLAND_INSTANCE_SIGNATURE=niri-shim` — chosen
+  over `XDG_CURRENT_DESKTOP=Hyprland`, which would also redirect the xdg-desktop-portal
+  backend — plus a `hyprctl` shim first in `PATH`
+  (`~/.local/libexec/openwhispr-hyprctl-shim/`) that exits 0 **only** for `version`. The shim
+  is unavoidable: the real binary connects to `$XDG_RUNTIME_DIR/hypr/$HIS/.socket.sock`, so
+  under niri it exits 1 with no HIS and **4** with a fake one. Everything else must keep
+  failing, exactly as `hyprctl keyword` already does under Hyprland's Lua parser — where the
+  D-Bus path works regardless.
+  **`HYPRLAND_CONFIG` is redirected to `~/.cache/openwhispr-hypr/` in *both* sessions**, not
+  just niri: `_writeBindToConfig()` writes `openwhispr-binds.conf` into
+  `dirname(HYPRLAND_CONFIG)` and appends a `source =` line to `hyprland.conf` — and
+  `~/.config/hypr` is a directory symlink into the repo, so that append lands in a
+  **git-tracked** file (it already had: `hyprland.conf:489`, removed by hand). Nothing is lost
+  by diverting it — the auto-bind is inert under the Lua parser anyway.
+  **Second, unrelated trap: the Control Panel never opens on a cold start.** The only
+  `createControlPanelWindow()` outside onboarding lives in `app.on("second-instance", …)`, so
+  the first launch produces just the `Voice Recorder` overlay — **96×96 px, floating** — and
+  under niri there is no tray host (quickshell exposes no StatusNotifier) to reopen from. The
+  wrapper therefore starts the app detached, waits for the singleton, then re-execs itself
+  once. Liveness must be read from the **PID inside `SingletonLock`** (verified against
+  `/proc/<pid>/comm`): `pgrep -x open-whispr-app` sees orphaned `--type=zygote` children, and
+  `[ -e SingletonSocket ]` still resolves after a SIGKILL because `/tmp/scoped_dir*/` is left
+  behind — both report a live instance that isn't there, and the second launch then becomes
+  the primary and hangs in the foreground.
+- **OpenWhispr's *default* is the AMD iGPU for everything, UI and inference — not a setting,
+  Mesa's implicit choice.** The UI still is: the Electron process only ever opens
+  `renderD129` (`0000:65:00.0`, amdgpu; mind the numbering, **inverted** w.r.t. the `card*`
+  nodes: `renderD128` is the NVIDIA `0000:01:00.0`), maps `libEGL_mesa`+`libgallium` and no
+  NVIDIA library, and its utility processes carry an explicit
+  `--render-node-override=/dev/dri/renderD129`. Inference used to follow:
+  `whisper-server-linux-x64` (package `openwhispr-vulkan`) initialized Vulkan on **RADV**
+  even though both ICDs sit in `/usr/share/vulkan/icd.d/`, because with no
+  `GGML_VK_VISIBLE_DEVICES`/`MESA_VK_DEVICE_SELECT` set the pick falls to
+  `libVkLayer_MESA_device_select.so`, which elects the GPU driving the display — the AMD one,
+  since `eDP-2` is wired to the iGPU. Inference is now pinned to the dGPU on purpose (next
+  entry); the UI deliberately is not.
+  **The judge is `/proc/PID/fdinfo/*` and RSS, not `fd` nor `maps`.** `ls /proc/PID/fd` only
+  shows the *presence* of a node (Chromium enumerates every GPU regardless — the same trap
+  already noted for swaync) and `maps` shows libraries *loaded*, which may sit unused;
+  `fdinfo` exposes the per-context DRM counters instead. Fingerprints with `ggml-medium`
+  loaded — **iGPU**: `drm-driver: amdgpu`, `drm-memory-gtt` ≈ 1.9 GiB and a growing
+  `drm-engine-compute`; **dGPU**: the server listed by
+  `nvidia-smi --query-compute-apps=pid,process_name,used_memory --format=csv` at ~1.88 GB.
+  **CPU fallback**: `libggml-cpu-zen4` mapped and **RSS ~1.85 GB** — against ~220 MB when the
+  weights live in VRAM. That RSS inversion is a sharper signal than `nvidia-smi`, because
+  mere device enumeration cannot produce it.
+  Diagnostic note: the dGPU reads `runtime_status = active` whenever HDMI is plugged, because
+  of the multi-GPU blit (entry above) — not attributable to OpenWhispr.
+- **OpenWhispr now runs Whisper *and* the local LLM on the RTX 5060 — and the trap is that
+  an EGL variable silently disables the Vulkan device.** `~/.local/bin/openwhispr` sets
+  `GGML_VK_VISIBLE_DEVICES=<index>`, and the payoff is large: 30 s of audio with
+  `ggml-medium` goes **1.45 s → 0.18 s** (~8x, median of 3). The gap is in the matrix units,
+  not bandwidth — the enumeration prints `matrix cores: NV_coopmat2` with `fp16: 1`/`bf16: 1`
+  on the NVIDIA against `KHR_coopmat` + `fp16: dot2` on the 780M, and Whisper's encoder is
+  dominated by dense GEMM. `llama-server-vulkan` (the local text-cleanup model) inherits the
+  same variable and moves too: ~1.88 GB + ~1.79 GB of the 8 GB VRAM.
+  **`__EGL_VENDOR_LIBRARY_FILENAMES` — an *EGL* variable — hides the NVIDIA *Vulkan*
+  device.** With the Mesa pin set, ggml enumerates **one** device (the AMD), so
+  `GGML_VK_VISIBLE_DEVICES=1` dies with `Invalid device index 1` and falls back to the CPU
+  backend **silently** (`libggml-cpu-zen4`; the only user-visible symptom is CPU usage
+  spiking during dictation). Reason: NVIDIA's Vulkan ICD lives inside `libGLX_nvidia.so.0`,
+  i.e. the same binary as its GLX/EGL stack, so pinning libglvnd to the Mesa vendor makes the
+  ICD fail to initialize and the loader drops the device. Hence `env -u
+  __EGL_VENDOR_LIBRARY_FILENAMES` in the wrapper — the same `env -u` already used by
+  `distrobox/.local/bin/matlab`. Corollary: that pin must be dropped for **any** dGPU use in
+  this session, Vulkan compute included, not just for EGL.
+  **The pin comes from `systemd --user`'s activation environment**
+  (`dbus-update-activation-environment` in `hyprland.lua`), so only the app *launched from the
+  launcher* inherits it — a wrapper started from a terminal does not. That asymmetry is why
+  the wrapper's device index is probed under the *same* `env -u` as the server: otherwise the
+  index is computed against a 2-device list and used against a 1-device one. Check with
+  `systemctl --user show-environment | grep __EGL_VENDOR`.
+  **First dictation after a restart costs ~15 s** — SPIR-V→SASS pipeline compilation, paid
+  by whisper-server *and* llama-server. The driver caches it, but `~/.cache/nvidia` is
+  **shared by every NVIDIA client** (Brave first) under a 128 MiB default cap, measured full
+  at 122.8 MiB, so LRU evicted Whisper's pipelines between runs. The wrapper therefore points
+  `__GL_SHADER_DISK_CACHE_PATH` at a dedicated directory with a 1 GiB cap; it holds only a
+  few MB. If the warm-up ever returns on every launch, suspect the two servers sharing that
+  one directory and split them.
+  Override: `OPENWHISPR_GPU=amd` forces the iGPU back without editing the wrapper.
 - **Building `openwhispr-vulkan` (or any ggml-Vulkan AUR package) needs
   `ulimit -s 2048`.** Install with
   `bash -c 'ulimit -s 2048 && paru -S openwhispr-vulkan'`. Without it the link dies on
@@ -356,6 +589,52 @@ Both are LazyVim-based: plugins live under `lua/plugins/*.lua`, pinned in
   `general:border_size = 2` with pywal borders (active=`color4`→`color2` 45° gradient,
   inactive=`color2`@~40%) fed via the generated `wal-colors.lua` (see theming section).
   Hyprland's global blur is **off** (`decoration:blur:enabled = false`).
+- **Scroll inversion is not per-axis in libinput — the horizontal wheel is fixed in the
+  mouse's firmware, not in any config.** The only knob any of the three stacks exposes is
+  `natural_scroll` (`hyprland.lua` `input:touchpad`, `config.kdl` `touchpad {}`, KDE's KCM),
+  and it flips **vertical and horizontal together**; KWin, Hyprland and niri have no
+  per-axis equivalent. So inverting *only* the MX Master 3S thumb wheel happens upstream of
+  libinput, in HID++: feature `THUMB WHEEL {2150}`, setting `thumb-scroll-invert`
+  (`Thumb Wheel Direction`), applied with `scripts/mx-master-thumbwheel.sh`
+  (`INVERT=false` reverts; not stowed, like the `kde-*` scripts). Being in the device, it
+  holds identically under KDE, Hyprland and niri, and leaves `HIRES WHEEL {2121}` — the
+  vertical axis — untouched.
+  **The touchpad cannot be done at all, and no uinput remapper fixes it**: it reports
+  `EV=10001b` in `/proc/bus/input/devices` — **no `EV_REL`** — so two-finger scroll is
+  *synthesized by libinput* from `ABS_MT_*` tracks. There is no `REL_HWHEEL` to negate, and
+  evsieve/input-remapper sit *upstream* of libinput, where only absolute touch coordinates
+  exist. The mouse is the opposite case (`REL=1943` → `REL_X|REL_Y|REL_HWHEEL|REL_WHEEL|
+  *_HI_RES`). Judge a device by these bits before promising a per-axis fix.
+  Like the DPI, the setting lives in the sensor's **RAM, not its flash**, so it is
+  reapplied on every power cycle by the resident Solaar daemon — already started from
+  `hyprland.lua:78`, `config.kdl:216` and, under KDE, `/etc/xdg/autostart/solaar.desktop`.
+  Nothing to add there. Ground truth is `solaar show` (`Thumb Wheel Direction : True`), not
+  `~/.config/solaar/config.yaml` — which is runtime state (`_unitId`, `_modelId`, battery)
+  and deliberately **not** versioned, same reasoning as `kwinrc`.
+- **The ASUS MUX flips the whole GPU topology — the session picks its profile from it at
+  login.** `gpu_mux_mode` (`/sys/class/firmware-attributes/asus-armoury/…`, also set by
+  Armoury Crate/G-Helper under **Windows**, and it persists across OSes) is `1` = hybrid
+  (panel `eDP-2` on amdgpu — everything in the next entries) or `0` = dGPU/"Ultimate"
+  (panel **`eDP-1` on the RTX 5060**, amdgpu logs `Cannot find any crtc or sizes`, the
+  panel loses PSR, the dGPU never suspends). It only changes on reboot
+  (`asusctl armoury set gpu_mux_mode 0|1` → `pending_reboot`). In dGPU mode the
+  iGPU-tuned session *fights* the hardware: `radeonsi` VA-API on the NVIDIA node fails
+  (`vaInitialize … resource allocation failed`), the Mesa EGL pin drags clients onto a
+  GPU with no output, and every connector-named rule goes silently inert — the visible
+  symptom was a stuttery desktop, first misattributed to a same-week upgrade.
+  `hyprland/.config/hypr/scripts/gpu-profile.sh` is the single source of truth: it reads
+  the **PCI vendor of the card driving the connected eDP** (not the ASUS attribute), and
+  `env` feeds `config.fish`/`.zshrc` (`GPU_PROFILE`, `GPU_PANEL`, `LIBVA_DRIVER_NAME`,
+  `VDPAU_DRIVER`), while `gen` — run in fish's `status is-login` block, *before* the
+  compositor starts (ly goes through a login fish too) — writes the gitignored
+  `~/.config/hypr/gpu-profile.lua` (`require`d by `hyprland.lua`, `monitors.lua`,
+  `workspaces.lua`; the Lua sandbox cannot read sysfs) and `~/.config/niri/gpu-profile.kdl`
+  (`include`d; holds the panel `output` **and** workspaces 1-5 + `magic`, because a named
+  workspace declared twice validates but has no documented precedence). The EGL Mesa pin
+  in Hyprland's activation env is emitted **only** for `hybrid`. `browser-amd-env` skips its
+  AMD pin under `dgpu`. The panel's niri mode stays `165.000`: it comes from the panel's
+  EDID, identical whichever GPU drives it. EDID `desc:` matching was rejected: the make
+  string depends on libdisplay-info's PNP table and a mismatch fails silently.
 - **Hybrid GPU: the iGPU is primary — never put NVIDIA env vars in the session.**
   AMD Radeon 780M (`0000:65:00.0` → `card2`) + NVIDIA RTX 5060 Max-Q
   (`0000:01:00.0` → `card1`). `eDP-2` is wired to the **iGPU**, so aquamarine elects
@@ -573,6 +852,53 @@ Both are LazyVim-based: plugins live under `lua/plugins/*.lua`, pinned in
   PWA. NB: forcing Wayland via `brave://flags/#ozone-platform-hint` is **not durable when
   injected into `Local State` externally** — Brave clears `enabled_labs_experiments` on
   shutdown; only a toggle through the flags UI persists.
+- **KDE Plasma: le scorciatoie globali si impostano via D-Bus, non scrivendo il file.**
+  Da Plasma 6.7 `kglobalacceld` non è più un processo a sé: `org.kde.kglobalaccel` e
+  `org.kde.KWin` risolvono allo **stesso PID** (`/usr/bin/kglobalacceld` non esiste,
+  `plasma-kglobalaccel.service` è `inactive dead`). Il registry vive quindi in memoria a
+  KWin, che serializza lui `~/.config/kglobalshortcutsrc` → un `kwriteconfig6` a caldo non
+  ha effetto e viene sovrascritto all'uscita. La via corretta è
+  `org.kde.KGlobalAccel.setForeignShortcut(as actionId, ai keys)` su `/kglobalaccel` — la
+  stessa che usa Impostazioni di sistema — con `actionId = [componentUnique, actionUnique,
+  componentFriendly, actionFriendly]`, es. `[kwin, "Switch to Desktop 3", KWin,
+  "Switch to Desktop 3"]`, e `keys` in **keycode Qt** (`Key_0..9` = 0x30..0x39,
+  Alt = 0x08000000, Shift = 0x02000000, Ctrl = 0x04000000, Meta = 0x10000000 → Alt+3 =
+  134217779). Ispeziona lo stato reale con
+  `busctl --user call org.kde.kglobalaccel /component/kwin org.kde.kglobalaccel.Component allShortcutInfos`.
+  Analogamente i desktop virtuali si creano a caldo con
+  `org.kde.KWin.VirtualDesktopManager.createDesktop(position, name)`, che genera l'UUID e
+  aggiorna `[Desktops]` in `kwinrc` da sé — non scrivere a mano `Id_N`/`Number`.
+  `scripts/kde-virtual-desktops.sh` applica tutto questo: 10 desktop + `ALT+1..0` /
+  `ALT+SHIFT+1..0`, replica di `hyprland.lua:345-350`. È idempotente e **non** stowato —
+  `kwinrc`/`kglobalshortcutsrc` sono stato runtime, versionarli creerebbe conflitti.
+  Due trappole: la verifica va fatta sul registry D-Bus e non sul file (KConfig fa il
+  flush con ~1 s di ritardo → falso negativo), e i desktop virtuali KDE sono **globali su
+  tutti gli output**, quindi non replicano l'assegnazione per-monitor di `workspaces.lua`
+  (1-5 su eDP-2, 6-10 su HDMI-A-1): `ALT+6` commuta entrambi gli schermi. Nota d'uso:
+  `Alt+1..9` è la scorciatoia tab di Firefox su Linux e la scorciatoia globale ha
+  priorità; Brave (`Ctrl+N`) e ghostty/kitty non sono impattati.
+  **Corollario diagnostico — una scorciatoia *rotta* è invisibile alla query per tasto.**
+  Sotto KDE la dictation di OpenWhispr non partiva: l'app registra il proprio componente
+  via portale `org.freedesktop.portal.GlobalShortcuts` (backend
+  `org.freedesktop.impl.portal.desktop.kde`, vivo anche se non esiste un'unit
+  `xdg-desktop-portal-kde.service`), ma il capture della hotkey nella sua UI salva una
+  combinazione **degenere**: `keys=[201326592]` = `0x0C000000`, cioè `Ctrl|Alt` con campo
+  tasto **`0x0`**. Lo si vede anche nel file, troncato:
+  `dictation=Ctrl+Alt+,none,OpenWhispr dictation`. Poiché `getGlobalShortcutsByKey`
+  confronta il **keycode esatto**, interrogarlo con Ctrl+Alt+D (`0x0C000044`) risponde
+  "nessuna azione" e `isGlobalShortcutAvailable` risponde `true` — il tasto *è* libero,
+  semplicemente nessuno lo ascolta. Per trovare un caso così serve un **dump di tutti i
+  componenti** (`allComponents` → `allShortcutInfos` per ciascuno), filtrando sul tasto
+  base. `scripts/kde-openwhispr-hotkey.sh` riassegna l'azione (`KEY` parametrico; default
+  Ctrl+Alt+D, `335544388` per la parità con il `CTRL+SUPER+D` di Hyprland) e verifica di
+  avere un owner vivo (`Component.isActive`) prima di scrivere: senza, la riassegnazione
+  è cosmetica perché manca chi riceve l'attivazione. Trappola nello scrivere queste sonde:
+  `uniqueName`/`friendlyName` sono **proprietà**, non metodi — `busctl get-property`, non
+  `busctl call`.
+- **`vial/` is not a Stow package** — it versions the Silakka54 (`feed:1212`) Vial saved layout
+  (Miryoku QWERTY from `jellydn/miryoku-silakka54-layout`, macOS `LGUI(…)` shortcuts rewritten to
+  `LCTL(…)`/`ALT+C` for Hyprland). Loaded into the firmware via Vial GUI → *Load saved layout*;
+  see `vial/README.md`.
 - Remote: `git@github.com:BrancaLex/dotfiles.git`.
 - `distrobox/` Stow package codifies the MATLAB R2026a container. Key files:
   - `distrobox/.local/bin/matlab` — host launcher; enters the `matlab-r2026a` container

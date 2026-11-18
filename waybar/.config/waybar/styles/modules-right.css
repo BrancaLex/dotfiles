@@ -1,0 +1,81 @@
+/*----------------
+    media info
+----------------*/
+
+#mpris {
+	padding: 0 12px;
+}
+
+/*------------
+    volume
+------------*/
+
+#custom-left_div.6 {
+	color: @volume;
+}
+#pulseaudio,
+#wireplumber {
+	background-color: @volume;
+}
+
+/*----------------
+    brightness
+----------------*/
+
+#custom-left_div.7 {
+	background-color: @volume;
+	color: @backlight;
+}
+#backlight {
+	background-color: @backlight;
+}
+
+/*-------------
+    battery
+-------------*/
+
+#custom-left_div.8 {
+	background-color: @backlight;
+	color: @battery;
+}
+#battery {
+	background-color: @battery;
+}
+#custom-left_inv.2 {
+	color: @battery;
+}
+
+/*----------------
+    notifications
+----------------*/
+
+#custom-notification {
+	padding: 0 14px 0 10px;
+	color: @battery;
+}
+#custom-notification.dnd-none,
+#custom-notification.dnd-notification {
+	color: @warning;
+}
+#custom-notification.inhibited-none,
+#custom-notification.inhibited-notification,
+#custom-notification.dnd-inhibited-none,
+#custom-notification.dnd-inhibited-notification {
+	color: @critical;
+}
+#custom-notification:hover {
+	background-color: @hover-bg;
+}
+
+/*----------------
+    power menu
+----------------*/
+
+#custom-power {
+	border-radius: 16px;
+	padding: 0 19px 0 16px;
+	color: @accent;
+}
+#custom-power:hover {
+	background-color: @hover-bg;
+}

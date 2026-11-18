@@ -9,8 +9,24 @@
 ------------------
 ---- MONITORS ----
 ------------------
+-- Profilo GPU: modulo GENERATO al login da scripts/gpu-profile.sh (gitignored), letto
+-- anche da monitors.lua e workspaces.lua. Il MUX del laptop decide su quale GPU e'
+-- cablato il pannello: ibrido -> iGPU AMD (eDP-2), dGPU -> RTX 5060 (eDP-1). Il
+-- sandbox Lua non puo' leggere sysfs, da qui il modulo generato. pcall -> fallback
+-- sul profilo storico (ibrido) se il modulo manca.
+pcall(function()
+	package.loaded["gpu-profile"] = nil
+end) -- no cache tra reload
+local okGpu, gpu = pcall(require, "gpu-profile")
+if not okGpu then
+	gpu = { profile = "hybrid", panel = "eDP-2", va = "radeonsi" }
+end
+package.loaded["gpu-profile"] = gpu
+
 require("monitors")
 require("workspaces")
+
+require("plugins/hyprglass")
 
 ---------------------
 ---- MY PROGRAMS ----
@@ -52,10 +68,11 @@ local swayncInhibit = "/home/ale/.config/swaync/scripts/screenshare-inhibit.sh"
 -- apply_theme.sh (`wal-colors.lua`, in ~/.config/hypr, gitignored) caricato con
 -- require; `hyprctl reload` ri-esegue questo file e rilegge il modulo. pcall →
 -- fallback statico se non ancora generato (prima esecuzione di apply_theme.sh).
-pcall(function() package.loaded["wal-colors"] = nil end) -- no cache tra reload
+pcall(function()
+	package.loaded["wal-colors"] = nil
+end) -- no cache tra reload
 local okBorder, walCol = pcall(require, "wal-colors")
-local activeBorder = okBorder
-	and { colors = walCol.active, angle = 45 }
+local activeBorder = okBorder and { colors = walCol.active, angle = 45 }
 	or { colors = { "rgba(33ccffee)", "rgba(00ff99ee)" }, angle = 45 }
 local inactiveBorder = (okBorder and walCol.inactive) or "rgba(595959aa)"
 
@@ -68,6 +85,18 @@ hl.on("hyprland.start", function()
 	hl.exec_cmd("hyprpaper")
 	hl.exec_cmd(applyTheme .. " $(cat ~/.cache/theme_mode 2>/dev/null || echo dark)")
 	hl.exec_cmd("snappy-switcher --daemon")
+	-- Solaar in background: il DPI del MX Master 3S (900) vive nella RAM del
+	-- sensore, non nella sua flash — onboard_profiles e' fra le feature assenti —
+	-- quindi torna al default 1000 a ogni ciclo di alimentazione del mouse.
+	-- Solaar riapplica ~/.config/solaar/config.yaml via HID++ all'evento di
+	-- connessione: senza demone residente l'impostazione non sopravvive.
+	-- --window=hide evita la finestra all'avvio (la tray icon richiede
+	-- libappindicator, presente sotto waybar ma non sotto quickshell/niri).
+	hl.exec_cmd("solaar --window=hide")
+	-- HyprGlass: `hyprpm enable` scrive solo il flag in state.toml e NON manda
+	-- `/plugin load` al compositore (hyprpm PluginManager.cpp: solo
+	-- ensurePluginsLoadState, cioè `reload`, carica). -n notifica l'esito.
+	hl.exec_cmd("hyprpm reload -n")
 	-- xdg-desktop-portal: Hyprland senza uwsm non raggiunge
 	-- graphical-session.target; hyprland-session.target lo tira su via
 	-- dipendenza e soddisfa il Requisite, poi avviamo il portal (altrimenti
@@ -81,10 +110,30 @@ hl.on("hyprland.start", function()
 	-- i portal e le PWA partono via D-Bus/systemd, quindi senza il pin qui finirebbero
 	-- comunque su EGL NVIDIA. Valori espliciti e non solo i nomi: cosi' non dipende
 	-- dall'ordine con cui hl.env viene applicato rispetto a questo blocco.
+	-- Il pin EGL su Mesa ha senso SOLO in modalita' ibrida (pannello sull'iGPU): con il
+	-- MUX sulla dGPU trascinerebbe i client sull'AMD, che non presenta nulla, e ogni
+	-- frame dovrebbe attraversare il PCIe.
+	local egl_pin = (gpu.profile == "hybrid")
+			and "__EGL_VENDOR_LIBRARY_FILENAMES=/usr/share/glvnd/egl_vendor.d/50_mesa.json "
+		or ""
+	-- Una sessione ibrida precedente nello stesso systemd --user avrebbe lasciato il pin.
+	local egl_unset = (gpu.profile ~= "hybrid")
+			and "; systemctl --user unset-environment __EGL_VENDOR_LIBRARY_FILENAMES"
+		or ""
+	-- Un servizio systemd --user che deve vedere queste variabili va avviato IN
+	-- CODA a questa riga (`; systemctl --user start ...`), mai con un hl.exec_cmd
+	-- separato: i due partono in parallelo e il servizio nasce senza pin. Era il
+	-- caso di elephant (backend di walker, ora rimosso): le app lanciate da walker
+	-- caricavano l'EGL NVIDIA e Spotify 1.3.4 (CEF 151, nvidia 615.78) andava in
+	-- SIGSEGV in libnvidia-egl-wayland2 a ogni avvio (A/B misurato 2026-10-14).
 	hl.exec_cmd(
 		"dbus-update-activation-environment --systemd WAYLAND_DISPLAY XDG_CURRENT_DESKTOP XDG_SESSION_TYPE XDG_SESSION_DESKTOP HYPRLAND_INSTANCE_SIGNATURE "
-			.. "__EGL_VENDOR_LIBRARY_FILENAMES=/usr/share/glvnd/egl_vendor.d/50_mesa.json "
-			.. "LIBVA_DRIVER_NAME=radeonsi VDPAU_DRIVER=radeonsi"
+			.. egl_pin
+			.. "LIBVA_DRIVER_NAME="
+			.. gpu.va
+			.. " VDPAU_DRIVER="
+			.. gpu.va
+			.. egl_unset
 	)
 	hl.exec_cmd("systemctl --user start hyprland-session.target")
 	hl.exec_cmd(
@@ -138,8 +187,11 @@ hl.env("QT_QPA_PLATFORMTHEME", "gnome")
 -- VA-API e +112 ms sull'init GLX.
 -- La dGPU si usa via offload ESPLICITO (prime-run, oppure il pattern di
 -- ~/.local/bin/matlab: __NV_PRIME_RENDER_OFFLOAD=1 __GLX_VENDOR_LIBRARY_NAME=nvidia).
-hl.env("LIBVA_DRIVER_NAME", "radeonsi")
-hl.env("VDPAU_DRIVER", "radeonsi")
+-- ECCEZIONE, modalita' MUX dGPU (gpu.profile == "dgpu"): li' la RTX 5060 E' il
+-- dispositivo di scanout, quindi VA-API/VDPAU vanno su nvidia. Il valore arriva dal
+-- modulo generato (vedi MONITORS in testa).
+hl.env("LIBVA_DRIVER_NAME", gpu.va)
+hl.env("VDPAU_DRIVER", gpu.va)
 -- __EGL_VENDOR_LIBRARY_FILENAMES NON va impostata qui. La storia, per intero:
 --
 -- Serviva a tenere i client Wayland sull'iGPU: rimuovere __GLX_VENDOR_LIBRARY_NAME
@@ -177,7 +229,7 @@ hl.config({
 	general = {
 		gaps_in = 5,
 		gaps_out = 10,
-		border_size = 2,
+		border_size = 0,
 		col = {
 			-- Colori pywal via require("wal-colors") definiti in testa; fallback statico.
 			active_border = activeBorder,
@@ -433,6 +485,16 @@ hl.window_rule({
 	name = "ghostty-opacity",
 	match = { class = "com.mitchellh.ghostty" },
 	opacity = "1.0 1.0",
+})
+
+-- Opt-in a HyprGlass: il plugin è globalmente `enabled = false`
+-- (plugins/hyprglass.lua), il tag forza l'effetto solo qui.
+-- Il tag viene valutato alla CREAZIONE della finestra: le finestre già
+-- aperte non lo ricevono con un `hyprctl reload`, vanno riaperte.
+hl.window_rule({
+	name = "glass-ghostty",
+	match = { class = "^com\\.mitchellh\\.ghostty$" },
+	tag = "+hyprglass_enabled",
 })
 
 -- KSA (Kitten Space Agency) — float + fullscreen, evita desync col tiling.

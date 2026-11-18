@@ -1,5 +1,9 @@
+# ghostty-git / -shell-integration-git / -terminfo-git: ESCLUSI DI PROPOSITO.
+# Il PKGBUILD AUR non compila cosi' com'e' (paru abortisce su `zig<0.16.0`),
+# quindi qui il bootstrap fallirebbe e la macchina resterebbe senza terminale.
+# Il manifest pacman tiene percio' `ghostty` dei repo; l'upgrade e' manuale:
+# vedi aur/ghostty-git/README.md. Da riapplicare dopo ogni capture-system.sh.
 claude-desktop-bin
-docker-desktop
 elephant-bin
 elephant-clipboard-bin
 elephant-desktopapplications-bin
@@ -7,16 +11,18 @@ elephant-files-bin
 elephant-providerlist-bin
 elephant-todo-bin
 elephant-websearch-bin
-freetube-bin
 github-cli-git
 hidapitester-git
 ly-git
 obsidian-bin
+openwhispr-vulkan
+orca-slicer-bin
 paru-debug
-python-pdfannots
-sioyek
+pico-sdk
+picotool
+python-pywal
+sioyek-dev
 snappy-switcher
 spotify
+vial-appimage
 visual-studio-code-bin
-zathura-git
-zotero-bin
