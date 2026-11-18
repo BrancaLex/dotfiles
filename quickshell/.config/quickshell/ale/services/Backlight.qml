@@ -38,18 +38,50 @@ Singleton {
         setProc.running = true;
     }
 
-    Process { id: setProc; onExited: refreshTimer.triggered() }
+    // Per lo slider del Control Center: il trascinamento produce decine di
+    // valori al secondo, e un brightnessctl per ciascuno accumulerebbe
+    // processi. Si tiene solo l'ultimo valore e lo si applica quando il
+    // precedente brightnessctl e' terminato (al piu' uno in volo).
+    property int _pending: -1
 
+    function setThrottled(pct: int) {
+        _pending = pct;
+        if (!setProc.running)
+            _flush();
+    }
+
+    function _flush() {
+        if (_pending < 0)
+            return;
+        const p = _pending;
+        _pending = -1;
+        _current = Math.round(p / 100 * _max);      // feedback immediato
+        set(p);
+    }
+
+    // Rilettura immediata, per chi sa che il valore e' appena cambiato (keybind
+    // via IPC, vedi Osd.qml) e non vuole attendere il prossimo tick.
+    function refresh() {
+        curFile.reload();
+    }
+
+    Process {
+        id: setProc
+
+        onExited: {
+            root.refresh();
+            root._flush();
+        }
+    }
+
+    // Solo la luminosita' corrente: max_brightness e' una costante del driver,
+    // letta una volta sola dal caricamento automatico del FileView.
     Timer {
-        id: refreshTimer
         interval: 2000
         running: true
         repeat: true
         triggeredOnStart: true
-        onTriggered: {
-            curFile.reload();
-            maxFile.reload();
-        }
+        onTriggered: root.refresh()
     }
 
     FileView {

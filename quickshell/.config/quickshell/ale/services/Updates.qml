@@ -33,7 +33,7 @@ Singleton {
     }
 
     Timer {
-        interval: 900000                 // 15 min
+        interval: Config.pollLazy
         running: true
         repeat: true
         triggeredOnStart: true

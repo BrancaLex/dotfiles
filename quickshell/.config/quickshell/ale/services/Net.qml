@@ -1,27 +1,52 @@
 pragma Singleton
 
-// Stato di rete via nmcli. NetworkManager e' interrogato in modalita' terse
-// (-t): l'output e' separato da ':' e stabile fra le versioni, a differenza
-// della tabella allineata che nmcli produce senza flag.
+// Stato di rete via Quickshell.Networking (NetworkManager su D-Bus di sistema):
+// push, nessun polling. Sostituisce le tre invocazioni di nmcli ogni 30 s, che
+// mostravano un cambio di rete fino a 30 s dopo.
 //
-// Non usa `nmcli monitor` (che sarebbe push) perche' quel comando emette righe
-// in linguaggio naturale e localizzate: parserebbe male appena cambia locale.
-// Il polling a 30 s e' sufficiente per un indicatore di barra.
+// Unico campionamento rimasto: i contatori rx/tx, perche' una velocita' e' la
+// derivata di un integrale e non ha un evento da osservare.
+//
+// I servizi D-Bus si avviano al primo accesso ed enumerano in modo asincrono:
+// all'avvio `devices` e' vuoto per qualche istante e lo stato vale
+// "disconnected" finche' i device non compaiono -- non e' un errore.
 
+import QtQuick
 import Quickshell
 import Quickshell.Io
-import QtQuick
+import Quickshell.Networking
 import qs
 
 Singleton {
     id: root
 
-    // "wifi" | "ethernet" | "disconnected" | "disabled"
-    property string kind: "disconnected"
-    property string ssid: ""
-    property string ifname: ""
-    property int signal: 0          // 0-100, solo wifi
-    property bool wifiEnabled: true
+    // Device connessi, ricalcolati quando cambia il modello o il `connected`
+    // di un device: find() legge d.connected a ogni valutazione, quindi QML
+    // registra una dipendenza dinamica su ciascuno.
+    readonly property var _wired: Networking.devices.values.find(d => d.type === DeviceType.Wired && d.connected) || null
+    readonly property var _wifi: Networking.devices.values.find(d => d.type === DeviceType.Wifi && d.connected) || null
+    readonly property var _wifiNet: _wifi ? _wifi.networks.values.find(n => n.connected) || null : null
+
+    readonly property bool wifiEnabled: Networking.wifiEnabled
+    // "wifi" | "ethernet" | "disconnected" | "disabled". L'ethernet ha
+    // precedenza, come nella versione nmcli.
+    readonly property string kind: _wired ? "ethernet" : _wifi ? "wifi" : wifiEnabled ? "disconnected" : "disabled"
+    readonly property string ifname: _wired ? _wired.name : _wifi ? _wifi.name : ""
+    readonly property string ssid: _wifiNet ? _wifiNet.name : ""
+    // 0-100, solo wifi. signalStrength e' in [0, 1] (doc v0.3.1, WifiNetwork).
+    readonly property int signal: _wifiNet ? Math.round(_wifiNet.signalStrength * 100) : 0
+
+    // Velocita' istantanee in KiB/s (1 KiB = 1024 B), derivate dai contatori
+    // cumulativi rx_bytes/tx_bytes dell'interfaccia attiva. Sono stime mediate
+    // sull'intervallo di campionamento: non throughput di picco.
+    property real downSpeed: 0
+    property real upSpeed: 0
+
+    // Stato del differenziatore: campione precedente (byte, ms). Un solo
+    // timestamp per entrambi i contatori: tx e' letto subito dopo rx.
+    property real _prevRx: -1
+    property real _prevTx: -1
+    property real _prevSampleTime: 0
 
     readonly property string icon: {
         if (!wifiEnabled && kind !== "ethernet") return "󰤮";
@@ -38,76 +63,69 @@ Singleton {
 
     readonly property string tooltip: {
         switch (kind) {
-        case "ethernet": return `Interfaccia: ${ifname}`;
-        case "wifi": return `Rete: ${ssid}\nSegnale: ${signal}%\nInterfaccia: ${ifname}`;
+        case "ethernet": return `Interfaccia: ${ifname}\nDownload: ${downSpeed.toFixed(1)} KiB/s\nUpload: ${upSpeed.toFixed(1)} KiB/s`;
+        case "wifi": return `Rete: ${ssid}\nSegnale: ${signal}%\nInterfaccia: ${ifname}\nDownload: ${downSpeed.toFixed(1)} KiB/s\nUpload: ${upSpeed.toFixed(1)} KiB/s`;
         case "disabled": return "Wi-Fi disattivato";
         default: return "Non connesso";
         }
     }
 
-    function refresh() {
-        devProc.running = true;
-        radioProc.running = true;
+    // Cambio (o perdita) di interfaccia: il contatore riparte da un'altra base,
+    // quindi il delta successivo sarebbe privo di senso. Si azzera lo stato.
+    onIfnameChanged: _resetRates()
+
+    function _resetRates() {
+        _prevRx = -1;
+        _prevTx = -1;
+        downSpeed = 0;
+        upSpeed = 0;
     }
 
+    // Campionamento dei contatori rx/tx dell'interfaccia attiva. Gira a pollFast
+    // (1 s): una velocita' aggiornata piu' di rado non sarebbe leggibile come
+    // indicatore di traffico.
+    // FileView e non Process(cat): reload() rilegge sysfs dentro il processo,
+    // senza uno spawn al secondo. Il tx e' ricaricato dall'onLoaded del rx,
+    // cosi' la derivata si calcola solo quando entrambi i campioni sono freschi.
     Timer {
-        interval: 30000
-        running: true
+        interval: Config.pollFast
+        running: root.ifname !== ""
         repeat: true
         triggeredOnStart: true
-        onTriggered: root.refresh()
+        onTriggered: rxFile.reload()
     }
 
-    // DEVICE:TYPE:STATE:CONNECTION per ogni interfaccia.
-    Process {
-        id: devProc
-        command: ["nmcli", "-t", "-f", "DEVICE,TYPE,STATE,CONNECTION", "device", "status"]
-        stdout: StdioCollector {
-            onStreamFinished: {
-                let found = false;
-                for (const line of text.split("\n")) {
-                    const p = line.split(":");
-                    if (p.length < 4 || p[2] !== "connected") continue;
-                    if (p[1] === "ethernet") {
-                        root.kind = "ethernet";
-                        root.ifname = p[0];
-                        found = true;
-                        break;                       // l'ethernet ha precedenza
-                    }
-                    if (p[1] === "wifi" && !found) {
-                        root.kind = "wifi";
-                        root.ifname = p[0];
-                        root.ssid = p[3];
-                        found = true;
-                        wifiProc.running = true;     // il segnale serve solo qui
-                    }
-                }
-                if (!found) root.kind = root.wifiEnabled ? "disconnected" : "disabled";
+    // rx_bytes/tx_bytes sono i totali dal boot (u64, wrap non osservabile in
+    // pratica). La velocita' e' la derivata discreta rispetto al tempo reale
+    // misurato, non all'intervallo nominale del Timer: sotto carico il tick
+    // slitta e dividere per `interval` gonfierebbe/sgonfierebbe il valore.
+    FileView {
+        id: rxFile
+
+        path: root.ifname ? `/sys/class/net/${root.ifname}/statistics/rx_bytes` : ""
+        onLoaded: txFile.reload()
+    }
+
+    FileView {
+        id: txFile
+
+        path: root.ifname ? `/sys/class/net/${root.ifname}/statistics/tx_bytes` : ""
+        onLoaded: {
+            const rx = Number(rxFile.text().trim());
+            const tx = Number(text().trim());
+            const now = Date.now();
+            if (!isFinite(rx) || !isFinite(tx))
+                return;
+            if (root._prevRx >= 0 && now > root._prevSampleTime) {
+                const dt = (now - root._prevSampleTime) / 1000;
+                const dRx = rx - root._prevRx;
+                const dTx = tx - root._prevTx;
+                root.downSpeed = dRx >= 0 ? dRx / dt / 1024 : 0;
+                root.upSpeed = dTx >= 0 ? dTx / dt / 1024 : 0;
             }
-        }
-    }
-
-    // Segnale della rete in uso. --rescan no: senza questo nmcli forza una
-    // scansione attiva a ogni tick, che sospende brevemente il traffico.
-    Process {
-        id: wifiProc
-        command: ["nmcli", "-t", "-f", "IN-USE,SIGNAL", "device", "wifi", "list", "--rescan", "no"]
-        stdout: StdioCollector {
-            onStreamFinished: {
-                for (const line of text.split("\n")) {
-                    if (!line.startsWith("*")) continue;
-                    root.signal = Number(line.split(":")[1]) || 0;
-                    break;
-                }
-            }
-        }
-    }
-
-    Process {
-        id: radioProc
-        command: ["nmcli", "radio", "wifi"]
-        stdout: StdioCollector {
-            onStreamFinished: root.wifiEnabled = text.trim() === "enabled"
+            root._prevRx = rx;
+            root._prevTx = tx;
+            root._prevSampleTime = now;
         }
     }
 }
