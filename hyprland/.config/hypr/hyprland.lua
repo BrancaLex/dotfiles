@@ -28,7 +28,10 @@ require("workspaces")
 -- Per l'offload reale: prime-run (GLX) o il pattern distrobox/.local/bin/matlab (EGL).
 local terminal = "ghostty"
 local fileManager = "ghostty -e yazi"
-local menu = "walker"
+-- Launcher nella pill di quickshell (services/Launcher.qml): sostituisce
+-- walker + elephant. Le app partono come figlie della shell, con il pin EGL
+-- aggiunto per processo in modalita' ibrida.
+local menu = "qs -c ale ipc call launcher toggle"
 local mainMod = "ALT"
 
 -- Path ricorrenti (repo Stow + dir deployata) centralizzati per non duplicarli.
@@ -65,9 +68,6 @@ hl.on("hyprland.start", function()
 	hl.exec_cmd("hyprpaper")
 	hl.exec_cmd(applyTheme .. " $(cat ~/.cache/theme_mode 2>/dev/null || echo dark)")
 	hl.exec_cmd("snappy-switcher --daemon")
-	-- elephant: gestito da elephant.service. Avvio singolo qui (no split-brain
-	-- sui socket), prima di walker così il socket esiste quando walker parte.
-	hl.exec_cmd("systemctl --user start elephant.service")
 	-- xdg-desktop-portal: Hyprland senza uwsm non raggiunge
 	-- graphical-session.target; hyprland-session.target lo tira su via
 	-- dipendenza e soddisfa il Requisite, poi avviamo il portal (altrimenti
@@ -102,18 +102,17 @@ hl.on("hyprland.start", function()
 	--     tutte le aperture della sessione.
 	--  2. DEVE stare dopo xdg-desktop-portal.service, altrimenti Brave/GTK4 su
 	--     Wayland nativo va in SIGSEGV interrogando il Settings portal (vedi sopra).
-	-- Il ritardo evita di competere con waybar/tema/walker durante l'avvio sessione.
+	-- Il ritardo evita di competere con la shell e il tema durante l'avvio sessione.
 	hl.exec_cmd("bash -c 'sleep 25; exec ~/.local/bin/browser-amd-env brave --no-startup-window'")
-	hl.exec_cmd("walker --gapplication-service")
 	hl.exec_cmd("hypridle")
 	hl.exec_cmd("copyq --start-server")
 	hl.exec_cmd("wlsunset -l 44.7 -L 10.6")
-	-- swaync: daemon notifiche (config in ~/.config/swaync). NON avviarlo da qui.
-	-- Il conflitto sul bus name NON e' innocuo: la seconda istanza esce con status 1 e
-	-- systemd la riavvia fino a start-limit-hit, lasciando swaync.service in stato
-	-- failed. L'avvio e' gia' garantito da D-Bus activation
-	-- (/usr/share/dbus-1/services/org.erikreider.swaync.service) + unit systemd.
-	-- Auto-DND durante lo screen-share (polling PipeWire, singola istanza via flock).
+	-- Notifiche: le serve quickshell (services/Notifs.qml, popup nella pill dell'isola).
+	-- swaync.service e' MASCHERATO (systemctl --user mask): il suo file di attivazione
+	-- D-Bus rivendica org.freedesktop.Notifications e lo resusciterebbe alla prima
+	-- notify-send arrivata a shell spenta. Non avviarlo da qui.
+	-- Auto-DND durante lo screen-share (polling PipeWire, singola istanza via flock;
+	-- parla con quickshell via `qs ipc call notifs inhibit`).
 	hl.exec_cmd(swayncInhibit)
 end)
 
@@ -322,7 +321,9 @@ hl.bind(
 -- System actions
 hl.bind(mainMod .. " + Backspace", hl.dsp.exec_cmd("wlogout -b 5 -T 348 -B 348 -n -C ~/.config/wlogout/style.css"))
 hl.bind("CTRL + " .. mainMod .. " + L", hl.dsp.exec_cmd("hyprlock"))
-hl.bind(mainMod .. " + SHIFT + N", hl.dsp.exec_cmd("swaync-client -t -sw"))
+-- Control Center nella pill dell'isola (quickshell, island/ControlCenter.qml): stesso
+-- tasto del vecchio pannello swaync. Esc o lo stesso tasto lo richiudono.
+hl.bind(mainMod .. " + SHIFT + N", hl.dsp.exec_cmd("qs -c ale ipc call cc toggle"))
 
 -- Focus (vim-like)
 hl.bind(mainMod .. " + H", hl.dsp.focus({ direction = "left" }))
@@ -371,13 +372,15 @@ hl.bind(
 )
 hl.bind(
 	"XF86AudioMute",
-	hl.dsp.exec_cmd(
-		'wpctl set-mute @DEFAULT_AUDIO_SINK@ toggle && notify-send -h string:x-canonical-private-synchronous:sys-notify -u low -i audio-volume-muted "Audio Muted"'
-	),
+	-- Nessun notify-send: l'OSD dell'isola (quickshell, Osd.qml) osserva il mute
+	-- del sink e mostra lo stato reale, anche per i toggle non da tastiera.
+	hl.dsp.exec_cmd("wpctl set-mute @DEFAULT_AUDIO_SINK@ toggle"),
 	{ locked = true, repeating = true }
 )
-hl.bind("XF86MonBrightnessUp", hl.dsp.exec_cmd("brightnessctl set 5%+"), { locked = true, repeating = true })
-hl.bind("XF86MonBrightnessDown", hl.dsp.exec_cmd("brightnessctl set 5%-"), { locked = true, repeating = true })
+-- La ipc call segue brightnessctl: OSD immediato nell'isola (sysfs non emette
+-- eventi, Backlight.qml campiona ogni 2 s); a shell spenta il tasto funziona lo stesso.
+hl.bind("XF86MonBrightnessUp", hl.dsp.exec_cmd("brightnessctl set 5%+ && qs -c ale ipc call osd brightness"), { locked = true, repeating = true })
+hl.bind("XF86MonBrightnessDown", hl.dsp.exec_cmd("brightnessctl set 5%- && qs -c ale ipc call osd brightness"), { locked = true, repeating = true })
 
 -- Controlli player (richiede playerctl): locked
 hl.bind("XF86AudioNext", hl.dsp.exec_cmd("playerctl next"), { locked = true })

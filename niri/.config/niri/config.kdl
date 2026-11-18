@@ -203,8 +203,6 @@ spawn-at-startup "qs" "-c" "ale"
 spawn-sh-at-startup "awww-daemon || hyprpaper"
 spawn-sh-at-startup "awww img \"$(cat ~/.cache/wal/wal)\" 2>/dev/null || true"
 spawn-sh-at-startup "~/dotfiles/hyprland/.config/hypr/scripts/apply_theme.sh $(cat ~/.cache/theme_mode 2>/dev/null || echo dark)"
-spawn-sh-at-startup "systemctl --user start elephant.service"
-spawn-at-startup "walker" "--gapplication-service"
 spawn-at-startup "hypridle"
 spawn-at-startup "copyq" "--start-server"
 spawn-at-startup "wlsunset" "-l" "44.7" "-L" "10.6"
@@ -277,7 +275,10 @@ binds {
     Mod+D      { spawn-sh "ghostty -e yazi ~/Downloads"; }
     // Override del default niri (switch-layout): il cambio layout resta su
     // grp:lwin_toggle come in Hyprland.
-    Mod+Space  { spawn "walker"; }
+    // Launcher nella pill di quickshell (services/Launcher.qml): aggiunge il
+    // pin EGL su Mesa per processo, quindi qui le app non finiscono sull'EGL
+    // NVIDIA anche se il pin NON sta nell'activation environment.
+    Mod+Space  { spawn "qs" "-c" "ale" "ipc" "call" "launcher" "toggle"; }
     Mod+B      { spawn-sh "~/.local/bin/browser-amd-env brave"; }
 
     // ---- Finestre ----
@@ -342,7 +343,7 @@ binds {
     Mod+Backspace { spawn-sh "wlogout -b 5 -T 348 -B 348 -n -C ~/.config/wlogout/style.css"; }
     // hyprlock usa ext-session-lock-v1, protocollo supportato da niri.
     Ctrl+Mod+L { spawn "hyprlock"; }
-    Mod+Shift+N { spawn "swaync-client" "-t" "-sw"; }
+    Mod+Shift+N { spawn "qs" "-c" "ale" "ipc" "call" "cc" "toggle"; }  // Control Center (quickshell)
     // Riavvia la shell QML. Serve di rado: quickshell ricarica da se' i .qml al
     // salvataggio; resta utile se il processo muore del tutto.
     Mod+Shift+B { spawn-sh "pkill -x qs; sleep 0.3; qs -c ale"; }
@@ -393,10 +394,10 @@ binds {
     XF86AudioRaiseVolume allow-when-locked=true { spawn-sh "wpctl set-volume -l 1 @DEFAULT_AUDIO_SINK@ 5%+"; }
     XF86AudioLowerVolume allow-when-locked=true { spawn-sh "wpctl set-volume @DEFAULT_AUDIO_SINK@ 5%-"; }
     XF86AudioMicMute     allow-when-locked=true { spawn-sh "wpctl set-mute @DEFAULT_AUDIO_SOURCE@ toggle"; }
-    XF86AudioMute        allow-when-locked=true { spawn-sh r#"wpctl set-mute @DEFAULT_AUDIO_SINK@ toggle && notify-send -h string:x-canonical-private-synchronous:sys-notify -u low -i audio-volume-muted "Audio Muted""#; }
+    XF86AudioMute        allow-when-locked=true { spawn-sh "wpctl set-mute @DEFAULT_AUDIO_SINK@ toggle"; }
 
-    XF86MonBrightnessUp   allow-when-locked=true { spawn "brightnessctl" "set" "5%+"; }
-    XF86MonBrightnessDown allow-when-locked=true { spawn "brightnessctl" "set" "5%-"; }
+    XF86MonBrightnessUp   allow-when-locked=true { spawn-sh "brightnessctl set 5%+ && qs -c ale ipc call osd brightness"; }
+    XF86MonBrightnessDown allow-when-locked=true { spawn-sh "brightnessctl set 5%- && qs -c ale ipc call osd brightness"; }
 
     XF86AudioNext  allow-when-locked=true { spawn "playerctl" "next"; }
     XF86AudioPause allow-when-locked=true { spawn "playerctl" "play-pause"; }
